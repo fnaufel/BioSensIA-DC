@@ -20,7 +20,8 @@ system.
 
 ### Check your CUDA driver
 
-1.  Make sure your GPU is available — for example, if you are on Sagres,
+1.  Make sure your GPU is available — for example, if you use
+    [Slurm](https://slurm.schedmd.com/overview.html) on an HPC cluster,
     open a shell on a GPU node with the following command:
 
     ``` bash
@@ -64,7 +65,8 @@ cd BioSensIA-DC
 
 ### Edit `pyproject.toml` to set correct values for your system
 
-Open `pyproject.toml` in a text editor. You will see the lines:
+Open `pyproject.toml` in a text editor. You will see these lines at the
+end of the file:
 
 ``` toml
 [tool.uv.sources]
@@ -89,6 +91,9 @@ explicit = true
 
 2.  If necessary, change `linux` to your operating system (e.g.,
     `win32`).
+
+3.  **Do not** change anything else in this file, unless you know what
+    you are doing.
 
 For more details, see the [uv page about installing
 PyTorch](https://docs.astral.sh/uv/guides/integration/pytorch/).
@@ -132,7 +137,8 @@ source .venv/bin/activate
 
 #### PyTorch with GPU access
 
-1.  Make sure your GPU is available — for example, if you are on Sagres,
+1.  Make sure your GPU is available — for example, if you use
+    [Slurm](https://slurm.schedmd.com/overview.html) on an HPC cluster,
     open a shell on a GPU node with the following command:
 
     ``` bash
@@ -171,7 +177,7 @@ source .venv/bin/activate
         torch.version.cuda                  = 12.4
         torch.backends.cuda.is_built        = True
         torch.cuda.is_available             = True
-        torch.cuda.device_count             = 2
+        torch.cuda.device_count             = 1
         device 0 name                       = NVIDIA A2
         torch.distributed.is_nccl_available = True
 
