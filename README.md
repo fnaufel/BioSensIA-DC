@@ -203,3 +203,50 @@ The output should be
     Canonical SMILES: CCO
     Num atoms: 3
     Molecular weight: 46.069
+
+### Install Uni-Core
+
+[Uni-Core](https://github.com/dptech-corp/Uni-Core) is a distributed
+PyTorch framework on which BioSensIA-DC depends.
+
+It must be built from source (with a build option to enable CUDA
+extensions) and manually overlaid into the virtual environment.
+
+The Uni-Core source is included in this repo. Change to the appropriate
+directory:
+
+``` bash
+cd ./external/Uni-Core/
+```
+
+Make sure the virtual environment is activated:
+
+``` bash
+source ../../.venv/bin/activate
+```
+
+Build with
+
+``` bash
+python setup.py install --enable-cuda-ext
+```
+
+> \[!CAUTION\] As Uni-Core has been built from source (and not installed
+> via `uv`), it is not formally included in the list of dependencies in
+> `pyproject.toml`.
+>
+> This means that running `uv sync` after this point **will remove it**
+> from the environment.
+>
+> To avoid this, if you need to synchronize the environment, use
+
+> ``` bash
+> uv sync --inexact
+> ```
+
+> instead. This will preserve packages installed by means other than
+> `uv`.
+
+## How to use BioSensIA-DC
+
+???
