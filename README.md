@@ -248,6 +248,39 @@ python setup.py install --enable-cuda-ext
 > instead. This will preserve packages installed by means other than
 > `uv`.
 
+### Confirm Uni-Core install is ok
+
+To confirm the `unicore-train` script has been installed in the right
+place:
+
+``` bash
+which unicore-train
+```
+
+The output should end with `BioSensIA-DC/.venv/bin/unicore-train`.
+
+The Uni-Core repository has [instructions on how to train a BERT
+model](https://github.com/dptech-corp/Uni-Core/tree/main/examples/bert/example_data)
+in order to confirm Uni-Core is working.
+
+The link they provide to the data is broken. Use
+<https://www.kaggle.com/datasets/bestwater/wikitext-2-v1?resource=download>
+instead. Then follow [the
+instructions](https://github.com/dptech-corp/Uni-Core/tree/main/examples/bert/example_data).
+
+Make sure your GPU is available when you run this example — for example,
+if you use Slurm on an HPC cluster, open a shell on a GPU node with the
+following command:
+
+``` bash
+srun --partition=gpu --gres=gpu:2 --pty bash
+```
+
+To check whether Uni-Core is using the GPU(s), look for something like
+this in the output of `train_bert_test.sh`:
+
+    2026-04-20 11:17:29 | INFO | unicore_cli.train | training on 2 devices (GPUs)
+
 ## How to use BioSensIA-DC
 
 ???
