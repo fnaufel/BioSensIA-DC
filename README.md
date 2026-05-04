@@ -231,7 +231,8 @@ Build with
 python setup.py install --enable-cuda-ext
 ```
 
-> [!WARNING] Urgent info that needs immediate user attention to avoid
+> [!WARNING]
+> Urgent info that needs immediate user attention to avoid
 > problems.
 
 > [!CAUTION] As Uni-Core has been built from source (and not installed
