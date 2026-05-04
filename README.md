@@ -281,6 +281,76 @@ this in the output of `train_bert_test.sh`:
 
     2026-04-20 11:17:29 | INFO | unicore_cli.train | training on 2 devices (GPUs)
 
+### Download DrugCLIP data
+
+The [DrugCLIP
+README](https://github.com/bowen-gao/DrugCLIP/blob/main/README.md) says
+that train data, the trained checkpoint and the test data for DUD-E can
+be found at
+<https://drive.google.com/drive/folders/1zW1MGpgunynFxTKXC2Q4RgWxZmg6CInV>.
+
+You should download the files (use
+[gdown](https://github.com/wkentaro/gdown), for example), uncompress
+them and organize them like so:
+
+    BioSensIA-DC/external/DrugCLIP
+                          ├── data/
+                          │   ├── DUD-E/
+                          │   │   └── raw/
+                          │   │       └── all/
+                          │   │           └── ...
+                          │   ├── emb/
+                          │   ├── lit_pcba/
+                          │   │   └── ...
+                          │   ├── pdb/
+                          │   ├── train.lmdb
+                          │   ├── valid.lmdb
+                          │   ├── dict_mol.txt
+                          │   └── dict_pkt.txt
+                          ├── mols.lmdb
+                          ├── pocket.lmdb
+                          ├── checkpoint_best.pt
+                          ├── mol_pre_no_h_220816.pt
+                          ├── pocket_pre_220816.pt
+                          └── ...
+
+The file `train.lmdb` exists in two archives: `pdbbind_only.zip` and
+`pdbbind_2020_combineset.zip`. Use the latter.
+
+### Make the script files executable
+
+If necessary:
+
+``` bash
+cd ./external/DrugCLIP
+chmod a+x *.sh
+```
+
 ## How to use BioSensIA-DC
+
+### Running the original DrugCLIP
+
+#### Benchmarks
+
+The bash script `test.sh` runs the tests on the PCBA or the DUD-E
+benchmarks. To choose which, you must edit the script file. Assign the
+desired dataset to the `TASK` variable:
+
+``` bash
+TASK="PCBA" # DUDE or PCBA
+```
+
+Then run
+
+``` bash
+cd ./external/DrugCLIP
+./test.sh
+```
+
+#### Retrieval
+
+???
+
+#### Training
 
 ???
