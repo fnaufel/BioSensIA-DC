@@ -240,21 +240,24 @@ Build with
 python setup.py install --enable-cuda-ext
 ```
 
-> [!WARNING]
-> Urgent info that needs immediate user attention to avoid problems.
-
-> [!CAUTION]
-> As Uni-Core has been built from source (and not installed via `uv`), it is not formally included in the list of dependencies in `pyproject.toml`.
+```{=markdown}
+> [!CAUTION] 
+> As Uni-Core has been built from source (and not installed
+> via `uv`), it is not formally included in the list of dependencies in
+> `pyproject.toml`.
 >
-> This means that running `uv sync` after this point **will remove it** from the environment.
+> This means that running `uv sync` after this point **will remove it**
+> from the environment.
 >
 > To avoid this, if you need to synchronize the environment, use
 >
-> ```{bash}
+> ```bash
 > uv sync --inexact
 > ```
 >
-> instead. This will preserve packages installed by means other than `uv`.
+> instead. This will preserve packages installed by means other than
+> `uv`.
+```
 
 
 ## How to use BioSensIA-DC

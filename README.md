@@ -231,10 +231,8 @@ Build with
 python setup.py install --enable-cuda-ext
 ```
 
-> [!WARNING] Urgent info that needs immediate user attention to avoid
-> problems.
-
-> [!CAUTION] As Uni-Core has been built from source (and not installed
+> [!CAUTION] 
+> As Uni-Core has been built from source (and not installed
 > via `uv`), it is not formally included in the list of dependencies in
 > `pyproject.toml`.
 >
@@ -242,11 +240,11 @@ python setup.py install --enable-cuda-ext
 > from the environment.
 >
 > To avoid this, if you need to synchronize the environment, use
-
-> ``` bash
+>
+> ```bash
 > uv sync --inexact
 > ```
-
+>
 > instead. This will preserve packages installed by means other than
 > `uv`.
 
