@@ -128,7 +128,7 @@ source .venv/bin/activate
     python --version
     ```
 
-    The output be of the form
+    The output should be of the form
 
         Python 3.11.xx
 
@@ -328,7 +328,7 @@ chmod a+x *.sh
 
 ## How to use BioSensIA-DC
 
-### Running the original DrugCLIP
+### To run the original DrugCLIP
 
 #### Benchmarks
 
