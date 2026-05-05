@@ -280,9 +280,9 @@ The Uni-Core repository has [instructions on how to train a BERT
 model](external/Uni-Core/examples/bert/example_data/README.md) in order
 to confirm Uni-Core is working.
 
-The instructions tell you to download and preprocess the data, but that
-is not necessary, as we have already included all the preprocessed files
-in this repository.
+The instructions tell you to download and preprocess the data, but
+**that is not necessary, as we have already included all the
+preprocessed files in this repository**.
 
 To start training the BERT model:
 
