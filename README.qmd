@@ -17,7 +17,16 @@ Welcome to the repository for the **BioSensIA-DC prototype**. This is work in pr
 
 ## What BioSensIA-DC is
 
-??? Cite DrugCLIP paper
+This repository contains the code for BioSensIA-DC, the software prototype for project BioSensIA.
+
+BioSensIA-DC is based on [DrugCLIP](https://github.com/bowen-gao/DrugCLIP), which in turn uses [Uni-Mol](https://github.com/deepmodeling/Uni-Mol/tree/main/unimol). More information about those projects can be found in [the DrugCLIP paper](https://arxiv.org/pdf/2310.06367.pdf) and in [the Uni-Mol paper](https://openreview.net/forum?id=6K2RM6wVqKu).
+
+
+## System requirements
+
+We have run BioSensIA-DC on GNU-Linux only. If you have been able to run it on other operating systems, please let us know.
+
+The software dependencies of BioSensIA are described below.
 
 
 ## How to install BioSensIA-DC
@@ -222,16 +231,18 @@ Molecular weight: 46.069
 
 It must be built from source (with a build option to enable CUDA extensions) and manually overlaid into the virtual environment.
 
-The Uni-Core source is included in this repo. Change to the appropriate directory:
-
-```{bash}
-cd ./external/Uni-Core/
-```
+The Uni-Core source is included in this repo. 
 
 Make sure the virtual environment is activated:
 
 ```{bash}
-source ../../.venv/bin/activate
+source .venv/bin/activate
+```
+
+Change to the appropriate directory:
+
+```{bash}
+cd ./external/Uni-Core/
 ```
 
 Build with
@@ -249,7 +260,7 @@ python setup.py install --enable-cuda-ext
 > This means that running `uv sync` after this point **will remove it**
 > from the environment.
 >
-> To avoid this, if you need to synchronize the environment, use
+> To avoid this, **if you need to synchronize the environment, use**
 >
 > ```bash
 > uv sync --inexact
@@ -270,15 +281,24 @@ which unicore-train
 
 The output should end with `BioSensIA-DC/.venv/bin/unicore-train`.
 
-The Uni-Core repository has [instructions on how to train a BERT model](https://github.com/dptech-corp/Uni-Core/tree/main/examples/bert/example_data) in order to confirm Uni-Core is working.
+The Uni-Core repository has [instructions on how to train a BERT model](external/Uni-Core/examples/bert/example_data/README.md) in order to confirm Uni-Core is working.
 
-The link they provide to the data is broken. Use <https://www.kaggle.com/datasets/bestwater/wikitext-2-v1?resource=download> instead. Then follow [the instructions](https://github.com/dptech-corp/Uni-Core/tree/main/examples/bert/example_data).
+The instructions tell you to download and preprocess the data, but that is not necessary, as we have already included all the preprocessed files in this repository.
 
-Make sure your GPU is available when you run this example --- for example, if you use Slurm on an HPC cluster, open a shell on a GPU node with the following command:
+To start training the BERT model:
 
-```{bash}
-srun --partition=gpu --gres=gpu:2 --pty bash
-```
+1. Make sure your GPU is available --- for example, if you use Slurm on an HPC cluster, open a shell on a GPU node with the following command:
+
+   ```{bash}
+   srun --partition=gpu --gres=gpu:2 --pty bash
+   ```
+
+1. Run the script:
+
+   ```{bash}
+   cd ./external/Uni-Core/examples/bert
+   ./train_bert_test.sh
+   ```
 
 To check whether Uni-Core is using the GPU(s), look for something like this in the output of `train_bert_test.sh`:
 
@@ -289,7 +309,7 @@ To check whether Uni-Core is using the GPU(s), look for something like this in t
 
 ### Download DrugCLIP data 
 
-The [DrugCLIP README](https://github.com/bowen-gao/DrugCLIP/blob/main/README.md) says that train data, the trained checkpoint and the test data for DUD-E can be found at  <https://drive.google.com/drive/folders/1zW1MGpgunynFxTKXC2Q4RgWxZmg6CInV>.
+The [DrugCLIP README](external/DrugCLIP/README.md) says that train data, the trained checkpoint and the test data for DUD-E can be found at  <https://drive.google.com/drive/folders/1zW1MGpgunynFxTKXC2Q4RgWxZmg6CInV>.
 
 You should download the files (use [gdown](https://github.com/wkentaro/gdown), for example), uncompress them and organize them like so:
 
@@ -335,7 +355,7 @@ chmod a+x *.sh
 
 #### Benchmarks
 
-The bash script `test.sh` runs the tests on the PCBA or the DUD-E benchmarks. To choose which, you must edit the script file. Assign the desired dataset to the `TASK` variable:
+The bash script [`test.sh`](external/DrugCLIP/test.sh) runs the tests on the PCBA or the DUD-E benchmarks. To choose which, you must edit the script file. Assign the desired dataset to the `TASK` variable:
 
 ```{bash}
 TASK="PCBA" # DUDE or PCBA
