@@ -80,8 +80,8 @@ cd BioSensIA-DC
 
 ### Edit `pyproject.toml` to set correct values for your system
 
-Open `pyproject.toml` in a text editor. You will see these lines at the
-end of the file:
+Open [`pyproject.toml`](pyproject.toml) in a text editor. You will see
+these lines at the end of the file:
 
 ``` toml
 [tool.uv.sources]
@@ -227,7 +227,8 @@ PyTorch framework on which BioSensIA-DC depends.
 It must be built from source (with a build option to enable CUDA
 extensions) and manually overlaid into the virtual environment.
 
-The Uni-Core source is included in this repo.
+The [Uni-Core source](external/Uni-Core) is included in the BioSensIA-DC
+repo.
 
 Make sure the virtual environment is activated:
 
