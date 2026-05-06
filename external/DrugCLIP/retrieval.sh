@@ -8,6 +8,7 @@
 
 results_path="./test"  # replace to your results path
 batch_size=8
+top_k=10000
 weight_path="checkpoint_best.pt"
 MOL_PATH="mols.lmdb" # path to the molecule file
 POCKET_PATH="pocket.lmdb" # path to the pocket file
@@ -29,3 +30,4 @@ python ./unimol/retrieval.py --user-dir ./unimol $data_path "./data" \
        --mol-path $MOL_PATH \
        --pocket-path $POCKET_PATH \
        --emb-dir $EMB_DIR \
+       --top-k $top_k \

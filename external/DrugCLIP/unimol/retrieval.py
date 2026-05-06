@@ -33,6 +33,9 @@ from sklearn.metrics import roc_curve
 
 def main(args):
 
+    if args.top_k <= 0:
+        raise ValueError("--top-k must be greater than 0")
+
     use_fp16 = args.fp16
     use_cuda = torch.cuda.is_available() and not args.cpu
 
@@ -59,7 +62,13 @@ def main(args):
 
     model.eval()
     
-    names, scores = task.retrieve_mols(model, args.mol_path, args.pocket_path, args.emb_dir, 10000)
+    names, scores = task.retrieve_mols(
+        model,
+        args.mol_path,
+        args.pocket_path,
+        args.emb_dir,
+        args.top_k,
+    )
 
     # save to ranked_compounds.txt
     with open(os.path.join(args.emb_dir, 'ranked_compounds.txt'), 'w') as f:
@@ -75,6 +84,7 @@ def cli_main():
     parser.add_argument("--mol-path", type=str, default="", help="path for mol data")
     parser.add_argument("--pocket-path", type=str, default="", help="path for pocket data")
     parser.add_argument("--emb-dir", type=str, default="", help="path for saved embedding data")
+    parser.add_argument("--top-k", type=int, default=10000, help="number of top-ranked molecules to write")
     options.add_model_args(parser)
     args = options.parse_args_and_arch(parser)
 
