@@ -623,7 +623,7 @@ class DrugCLIP(UnicoreTask):
         data_path = "./data/lit_pcba/" + name + "/mols.lmdb"
         mol_dataset = self.load_mols_dataset(data_path, "atoms", "coordinates")
         num_data = len(mol_dataset)
-        bsz=64
+        bsz = self.args.batch_size_valid
         #print(num_data//bsz)
         mol_reps = []
         mol_names = []
@@ -762,7 +762,7 @@ class DrugCLIP(UnicoreTask):
         data_path = "./data/DUD-E/raw/all/" + target + "/mols.lmdb"
         mol_dataset = self.load_mols_dataset(data_path, "atoms", "coordinates")
         num_data = len(mol_dataset)
-        bsz=64
+        bsz = self.args.batch_size_valid
         print(num_data//bsz)
         mol_reps = []
         mol_names = []
@@ -947,7 +947,7 @@ class DrugCLIP(UnicoreTask):
         mol_reps, mol_names = self.encode_mols_once(model, mol_path, emb_dir,  "atoms", "coordinates")
         
         pocket_dataset = self.load_pockets_dataset(pocket_path)
-        pocket_data = torch.utils.data.DataLoader(pocket_dataset, batch_size=16, collate_fn=pocket_dataset.collater)
+        pocket_data = torch.utils.data.DataLoader(pocket_dataset, batch_size=self.args.batch_size, collate_fn=pocket_dataset.collater)
         pocket_reps = []
         pocket_names = []
         for _, sample in enumerate(tqdm(pocket_data)):
