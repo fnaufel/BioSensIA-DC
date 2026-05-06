@@ -9,6 +9,7 @@
 
 results_path="./test"  # replace to your results path
 batch_size=8
+batch_size_valid=8
 weight_path="checkpoint_best.pt"
 
 TASK="PCBA" # DUDE or PCBA
@@ -18,21 +19,23 @@ if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
 fi
 
 python ./unimol/test.py \
-       --user-dir ./unimol $data_path "./data" \
-       --valid-subset test \
-       --results-path $results_path \
-       --num-workers 8 \
-       --ddp-backend=c10d \
+       $data_path "./data" \
+       --arch drugclip \
        --batch-size $batch_size \
-       --task drugclip \
-       --loss in_batch_softmax \
-       --arch drugclip  \
+       --batch-size-valid $batch_size_valid \
+       --ddp-backend c10d \
        --fp16 \
        --fp16-init-scale 4 \
-       --fp16-scale-window 256  \
-       --seed 1 \
-       --path $weight_path \
-       --log-interval 100 \
+       --fp16-scale-window 256 \
        --log-format simple \
+       --log-interval 100 \
+       --loss in_batch_softmax \
        --max-pocket-atoms 511 \
+       --num-workers 8 \
+       --path $weight_path \
+       --results-path $results_path \
+       --seed 1 \
+       --task drugclip \
        --test-task $TASK \
+       --user-dir ./unimol \
+       --valid-subset test
