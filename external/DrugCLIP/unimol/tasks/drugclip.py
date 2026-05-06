@@ -907,7 +907,7 @@ class DrugCLIP(UnicoreTask):
         mol_dataset = self.load_retrieval_mols_dataset(data_path,atoms,coords)
         mol_reps = []
         mol_names = []
-        bsz=32
+        bsz = self.args.batch_size
         mol_data = torch.utils.data.DataLoader(mol_dataset, batch_size=bsz, collate_fn=mol_dataset.collater)
         for _, sample in enumerate(tqdm(mol_data)):
             sample = unicore.utils.move_to_cuda(sample)
