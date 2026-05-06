@@ -8,6 +8,7 @@
 
 results_path="./test"  # replace to your results path
 batch_size=8
+batch_size_valid=8
 top_k=10000
 weight_path="checkpoint_best.pt"
 MOL_PATH="mols.lmdb" # path to the molecule file
@@ -18,16 +19,27 @@ if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
   export CUDA_VISIBLE_DEVICES="${GPU_ID:-0}"
 fi
 
-python ./unimol/retrieval.py --user-dir ./unimol $data_path "./data" \
-       --valid-subset test \
-       --results-path $results_path \
-       --num-workers 8 --ddp-backend=c10d --batch-size $batch_size \
-       --task drugclip --loss in_batch_softmax --arch drugclip  \
-       --max-pocket-atoms 256 \
-       --fp16 --fp16-init-scale 4 --fp16-scale-window 256  --seed 1 \
-       --path $weight_path \
-       --log-interval 100 --log-format simple \
-       --mol-path $MOL_PATH \
-       --pocket-path $POCKET_PATH \
+python ./unimol/retrieval.py \
+       $data_path "./data" \
+       --arch drugclip \
+       --batch-size $batch_size \
+       --batch-size-valid $batch_size_valid \
+       --ddp-backend c10d \
        --emb-dir $EMB_DIR \
+       --fp16 \
+       --fp16-init-scale 4 \
+       --fp16-scale-window 256 \
+       --log-format simple \
+       --log-interval 100 \
+       --loss in_batch_softmax \
+       --max-pocket-atoms 256 \
+       --mol-path $MOL_PATH \
+       --num-workers 8 \
+       --path $weight_path \
+       --pocket-path $POCKET_PATH \
+       --results-path $results_path \
+       --seed 1 \
+       --task drugclip \
        --top-k $top_k \
+       --user-dir ./unimol \
+       --valid-subset test
