@@ -8,8 +8,8 @@
 #########################################################################
 
 results_path="./test"  # replace to your results path
-batch_size=8
-batch_size_valid=8
+batch_size=1
+batch_size_valid=1
 weight_path="checkpoint_best.pt"
 
 TASK="PCBA" # DUDE or PCBA
