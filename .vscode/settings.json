@@ -1,4 +1,9 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
-    "python.analysis.inlayHints.functionReturnTypes": true
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/external/Uni-Core",
+    "${workspaceFolder}/external/DrugCLIP"
+  ],
+  "python.analysis.useLibraryCodeForTypes": true,
+  "python.analysis.inlayHints.functionReturnTypes": true
 }
