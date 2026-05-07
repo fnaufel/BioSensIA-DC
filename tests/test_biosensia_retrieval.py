@@ -6,7 +6,7 @@ import lmdb
 import numpy as np
 import pytest
 
-from biosensia_utils import create_pocket_lmdb, read_lmdb_records
+from biosensia_retrieval import create_pocket_lmdb, read_lmdb_records
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -174,9 +174,9 @@ def test_create_pocket_lmdb_download_path_is_offline_mockable(monkeypatch, tmp_p
             "pocket_coordinates": np.array([[1.0, 2.0, 3.0]], dtype=np.float32),
         }
 
-    monkeypatch.setattr("biosensia_utils._ensure_downloaded_pdb", fake_download)
+    monkeypatch.setattr("biosensia_retrieval._ensure_downloaded_pdb", fake_download)
     monkeypatch.setattr(
-        "biosensia_utils._record_from_protein_pdb_and_hetatm_ligand",
+        "biosensia_retrieval._record_from_protein_pdb_and_hetatm_ligand",
         fake_record_from_downloaded_pdb,
     )
 
