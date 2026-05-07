@@ -6,7 +6,7 @@ import lmdb
 import numpy as np
 import pytest
 
-from biosensia_utils import create_pocket_lmdb
+from biosensia_utils import create_pocket_lmdb, read_lmdb_records
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -14,23 +14,28 @@ COMBINE_SET_DIR = REPO_ROOT / "external/DrugCLIP/data/pdb/combine_set"
 TWO_IE_FOUR_DIR = COMBINE_SET_DIR / "2ie4"
 
 
-def read_lmdb_records(path: Path) -> list[dict]:
+def test_read_lmdb_records_accepts_molecule_style_lmdb(tmp_path):
+    output_path = tmp_path / "mols.lmdb"
     env = lmdb.open(
-        str(path),
+        str(output_path),
         subdir=False,
-        readonly=True,
+        readonly=False,
         lock=False,
         readahead=False,
         meminit=False,
+        map_size=1 << 20,
     )
     try:
-        with env.begin() as transaction:
-            return [
-                pickle.loads(value)
-                for _, value in transaction.cursor().iternext()
-            ]
+        with env.begin(write=True) as transaction:
+            transaction.put(b"10", pickle.dumps({"smi": "CCC"}))
+            transaction.put(b"2", pickle.dumps({"smi": "CC"}))
+            transaction.put(b"0", pickle.dumps({"smi": "C"}))
     finally:
         env.close()
+
+    records = read_lmdb_records(output_path)
+
+    assert [record["smi"] for record in records] == ["C", "CC", "CCC"]
 
 
 def test_create_pocket_lmdb_accepts_single_pdb_id_string(tmp_path):

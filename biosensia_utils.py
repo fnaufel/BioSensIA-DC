@@ -157,6 +157,36 @@ def create_pocket_lmdb(
     return summaries
 
 
+def read_lmdb_records(path: str | Path) -> list[dict[str, Any]]:
+    """Read pickled DrugCLIP LMDB records.
+
+    The same helper works for DrugCLIP pocket and molecule LMDB files because
+    both store pickled dictionaries under numeric keys.
+    """
+
+    env = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with env.begin() as transaction:
+            keys = list(transaction.cursor().iternext(values=False))
+            if _has_numeric_lmdb_keys(keys):
+                keys = sorted(keys, key=lambda key: int(key.decode("ascii")))
+            return [
+                pickle.loads(value)
+                for key in keys
+                if (value := transaction.get(key)) is not None
+            ]
+    finally:
+        env.close()
+
+
 def _build_local_pocket_record(
     pdb_id: str,
     bundle_dir: Path,
@@ -508,4 +538,13 @@ def _first_existing(
     return None
 
 
-__all__ = ["create_pocket_lmdb"]
+def _has_numeric_lmdb_keys(keys: list[bytes]) -> bool:
+    if not keys:
+        return False
+    try:
+        return all(key.decode("ascii").isdigit() for key in keys)
+    except UnicodeDecodeError:
+        return False
+
+
+__all__ = ["create_pocket_lmdb", "read_lmdb_records"]
