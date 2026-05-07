@@ -12,7 +12,7 @@ batch_size_valid=8
 top_k=10000
 weight_path="checkpoint_best.pt"
 MOL_PATH="mols.lmdb" # path to the molecule file
-POCKET_PATH="pocket.lmdb" # path to the pocket file
+POCKET_PATH="../../data/2ie4.lmdb" # path to the pocket file
 EMB_DIR="./data/emb" # path to the cached mol embedding file
 
 if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
