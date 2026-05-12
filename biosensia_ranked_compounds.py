@@ -11,6 +11,7 @@ import argparse
 import json
 import logging
 import os
+import pprint
 import time
 import urllib.error
 import urllib.parse
@@ -172,6 +173,10 @@ def retrieve_mols_from_drugclip(args) -> tuple[list[str], np.ndarray]:
         model.cuda()
 
     model.eval()
+    LOGGER.info(
+        "DrugCLIP retrieval args:\n%s",
+        pprint.pformat(vars(args), sort_dicts=True),
+    )
     return task.retrieve_mols(
         model,
         args.mol_path,
@@ -301,19 +306,32 @@ def enrich_pubchem_by_inchikey(
     if limit is not None:
         requested = requested[:limit]
 
-    for index, inchikey in enumerate(requested):
-        if inchikey in cache:
+    requests = [
+        {
+            "index": index,
+            "inchikey": inchikey,
+            "cached": inchikey in cache,
+            "url": "" if inchikey in cache else _pubchem_property_url(inchikey),
+        }
+        for index, inchikey in enumerate(requested, start=1)
+    ]
+
+    for request in _iter_enrichment_requests("PubChem", requests):
+        inchikey = request["inchikey"]
+        if request["cached"]:
             rows.append(cache[inchikey])
             continue
 
+        url = request["url"]
         row = _fetch_pubchem_one(
             inchikey,
+            url=url,
             timeout_seconds=timeout_seconds,
         )
         rows.append(row)
         if cache_path:
             _append_jsonl(cache_path, row)
-        if index < len(requested) - 1:
+        if request["index"] < len(requests):
             time.sleep(delay_seconds)
 
     return rows
@@ -335,41 +353,41 @@ def enrich_chembl_by_inchikey(
     if limit is not None:
         requested = requested[:limit]
 
-    for index, inchikey in enumerate(requested):
-        if inchikey in cache:
+    requests = [
+        {
+            "index": index,
+            "inchikey": inchikey,
+            "cached": inchikey in cache,
+            "url": "" if inchikey in cache else _chembl_molecule_url(inchikey),
+        }
+        for index, inchikey in enumerate(requested, start=1)
+    ]
+
+    for request in _iter_enrichment_requests("ChEMBL", requests):
+        inchikey = request["inchikey"]
+        if request["cached"]:
             rows.append(cache[inchikey])
             continue
 
-        row = _fetch_chembl_one(inchikey, timeout_seconds=timeout_seconds)
+        url = request["url"]
+        row = _fetch_chembl_one(
+            inchikey,
+            url=url,
+            timeout_seconds=timeout_seconds,
+        )
         rows.append(row)
         if cache_path:
             _append_jsonl(cache_path, row)
-        if index < len(requested) - 1:
+        if request["index"] < len(requests):
             time.sleep(delay_seconds)
 
     return rows
 
 
 def _fetch_pubchem_one(
-    inchikey: str, *, timeout_seconds: float = 20
+    inchikey: str, *, url: str | None = None, timeout_seconds: float = 20
 ) -> dict[str, Any]:
-    properties = ",".join(
-        [
-            "Title",
-            "IUPACName",
-            "SMILES",
-            "ConnectivitySMILES",
-            "InChIKey",
-            "MolecularFormula",
-            "MolecularWeight",
-            "XLogP",
-            "TPSA",
-        ]
-    )
-    url = (
-        f"{PUBCHEM_PUG_REST_BASE}/compound/inchikey/"
-        f"{urllib.parse.quote(inchikey)}/property/{properties}/JSON"
-    )
+    url = url or _pubchem_property_url(inchikey)
     try:
         data = _get_json(url, timeout_seconds=timeout_seconds)
         props = data["PropertyTable"]["Properties"][0]
@@ -403,13 +421,30 @@ def _fetch_pubchem_one(
     }
 
 
-def _fetch_chembl_one(
-    inchikey: str, *, timeout_seconds: float = 20
-) -> dict[str, Any]:
-    query = urllib.parse.urlencode(
-        {"molecule_structures__standard_inchi_key": inchikey, "limit": "5"}
+def _pubchem_property_url(inchikey: str) -> str:
+    properties = ",".join(
+        [
+            "Title",
+            "IUPACName",
+            "SMILES",
+            "ConnectivitySMILES",
+            "InChIKey",
+            "MolecularFormula",
+            "MolecularWeight",
+            "XLogP",
+            "TPSA",
+        ]
     )
-    url = f"{CHEMBL_API_BASE}/molecule.json?{query}"
+    return (
+        f"{PUBCHEM_PUG_REST_BASE}/compound/inchikey/"
+        f"{urllib.parse.quote(inchikey)}/property/{properties}/JSON"
+    )
+
+
+def _fetch_chembl_one(
+    inchikey: str, *, url: str | None = None, timeout_seconds: float = 20
+) -> dict[str, Any]:
+    url = url or _chembl_molecule_url(inchikey)
     data = _get_json(url, timeout_seconds=timeout_seconds)
     molecules = data.get("molecules", [])
     chembl_ids = [
@@ -426,6 +461,37 @@ def _fetch_chembl_one(
         if first_id
         else None,
     }
+
+
+def _chembl_molecule_url(inchikey: str) -> str:
+    query = urllib.parse.urlencode(
+        {"molecule_structures__standard_inchi_key": inchikey, "limit": "5"}
+    )
+    return f"{CHEMBL_API_BASE}/molecule.json?{query}"
+
+
+def _iter_enrichment_requests(service: str, requests: list[dict[str, Any]]):
+    from unicore.logging import progress_bar
+
+    total = len(requests)
+    progress = progress_bar.progress_bar(
+        requests,
+        log_format=None,
+        log_interval=1,
+        prefix=f"{service} enrichment",
+    )
+    for request in progress:
+        progress.log(
+            {
+                "processed": request["index"],
+                "total": total,
+                "status": "cached" if request["cached"] else "download",
+                "url": request["url"],
+            },
+            tag=f"{service.lower()}_enrichment",
+            step=request["index"],
+        )
+        yield request
 
 
 def _rdkit_descriptors(smiles: str) -> dict[str, Any]:
