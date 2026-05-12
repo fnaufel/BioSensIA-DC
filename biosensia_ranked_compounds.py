@@ -590,7 +590,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output-parquet",
         default="external/DrugCLIP/data/emb/ranked_compounds_enriched.parquet",
     )
-    parser.add_argument("--output-csv", default=None)
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args(argv)
 
@@ -636,12 +635,6 @@ def main(argv: list[str] | None = None) -> None:
     output_parquet.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(output_parquet)
     LOGGER.info("wrote %s", output_parquet)
-
-    if cli_args.output_csv:
-        output_csv = Path(cli_args.output_csv)
-        output_csv.parent.mkdir(parents=True, exist_ok=True)
-        df.write_csv(output_csv)
-        LOGGER.info("wrote %s", output_csv)
 
 
 if __name__ == "__main__":

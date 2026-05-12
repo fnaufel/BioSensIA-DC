@@ -22,7 +22,6 @@ BATCH_SIZE_VALID="${BATCH_SIZE_VALID:-8}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
 POCKET_PATH="${POCKET_PATH:-data/query-pocket.lmdb}"
 OUTPUT_PARQUET="${OUTPUT_PARQUET:-external/DrugCLIP/data/emb/ranked_compounds_enriched.parquet}"
-OUTPUT_CSV="${OUTPUT_CSV:-external/DrugCLIP/data/emb/ranked_compounds_enriched.csv}"
 
 ENRICH_PUBCHEM="${ENRICH_PUBCHEM:-1}"
 ENRICH_CHEMBL="${ENRICH_CHEMBL:-1}"
@@ -39,7 +38,6 @@ args=(
   --num-workers "$NUM_WORKERS"
   --pocket-path "$POCKET_PATH"
   --output-parquet "$OUTPUT_PARQUET"
-  --output-csv "$OUTPUT_CSV"
 )
 
 if [ "$ENRICH_PUBCHEM" != "0" ]; then
