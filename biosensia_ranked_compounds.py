@@ -25,6 +25,7 @@ import numpy as np
 import torch
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
+from tqdm.auto import tqdm
 
 
 LOGGER = logging.getLogger(__name__)
@@ -471,27 +472,24 @@ def _chembl_molecule_url(inchikey: str) -> str:
 
 
 def _iter_enrichment_requests(service: str, requests: list[dict[str, Any]]):
-    from unicore.logging import progress_bar
-
     total = len(requests)
-    progress = progress_bar.progress_bar(
+    with tqdm(
         requests,
-        log_format=None,
-        log_interval=1,
-        prefix=f"{service} enrichment",
-    )
-    for request in progress:
-        progress.log(
-            {
-                "processed": request["index"],
-                "total": total,
-                "status": "cached" if request["cached"] else "download",
-                "url": request["url"],
-            },
-            tag=f"{service.lower()}_enrichment",
-            step=request["index"],
-        )
-        yield request
+        desc=f"{service} enrichment",
+        total=total,
+        unit="compound",
+        dynamic_ncols=True,
+    ) as progress:
+        for request in progress:
+            status = "cached" if request["cached"] else "download"
+            url = request["url"] or "(cached)"
+            progress.set_description(f"{service} {request['index']}/{total}")
+            progress.set_postfix_str(f"status={status} url={url}", refresh=True)
+            progress.write(
+                f"{service} [{request['index']}/{total}] "
+                f"status={status} url={url}"
+            )
+            yield request
 
 
 def _rdkit_descriptors(smiles: str) -> dict[str, Any]:
