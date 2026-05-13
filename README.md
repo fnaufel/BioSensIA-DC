@@ -404,9 +404,9 @@ protein-ligand (19443), nucleic acid-ligand (149), protein-nucleic acid
 details.
 
 We have implemented a Python function to search this data and produce an
-LMDB file containing the pockets specified in the arguments. See
-[`biosensia_retrieval.py#create_pocket_lmdb`](https://github.com/fnaufel/BioSensIA-DC/blob/85357d72b9fb75bb6bc84a77816332b4b52f06e5/biosensia_retrieval.py)
-for more details.
+LMDB file containing the pockets specified in the arguments. See the
+definition of the `create_pocket_lmdb` function in
+[`biosensia_retrieval.py`](biosensia_retrieval.py) for more details.
 
 The first time the retrieval script is run, DrugCLIP must generate
 embeddings for **all** of the candidate molecules. This may take hours.
