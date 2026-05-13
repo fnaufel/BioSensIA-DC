@@ -391,7 +391,7 @@ a total of 23496 biomolecular complexes, including protein-ligand (19443),
 nucleic acid-ligand (149), protein-nucleic acid (1052), and protein-protein 
 complexes (2852). See `external/DrugCLIP/data/pdb/combine_set/readme/PDBbind-101.txt` for more details.
 
-We have implemented a Python function to search this data and produce an LMDB file containing the pockets specified in the arguments. See [`biosensia_retrieval.py#create_pocket_lmdb`](biosensia_retrieval.py#create_pocket_lmdb) for more details.
+We have implemented a Python function to search this data and produce an LMDB file containing the pockets specified in the arguments. See [`biosensia_retrieval.py#create_pocket_lmdb`](https://github.com/fnaufel/BioSensIA-DC/blob/85357d72b9fb75bb6bc84a77816332b4b52f06e5/biosensia_retrieval.py) for more details.
 
 The first time the retrieval script is run, DrugCLIP must generate embeddings for **all** of the candidate molecules. This may take hours. The generated embeddings are saved to a file in the directory specified by the `EMB_DIR` variable. Subsequent runs with the same set of candidate molecules will be much faster, as they will use these saved embeddings.
 
