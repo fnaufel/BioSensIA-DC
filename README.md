@@ -453,6 +453,9 @@ embeddings. Each line of the file will contain the SMILES formula of the
 molecule and its score (the maximum value of its compatibility with any
 pocket in the query).
 
+Because of hard-coded constraints in the original DrugCLIP code, a GPU
+must be available for the script to run.
+
 #### Training
 
 \<\<\<To be detailed later.\>\>\>
