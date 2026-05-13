@@ -355,9 +355,10 @@ chmod a+x *.sh
 
 #### Benchmarks
 
-The bash script [`test.sh`](external/DrugCLIP/test.sh) runs the tests on
-the PCBA or the DUD-E benchmarks. To choose which, you must edit the
-script file. Assign the desired dataset to the `TASK` variable:
+The bash script [`external/DrugCLIP/test.sh`](external/DrugCLIP/test.sh)
+runs the tests on the PCBA or the DUD-E benchmarks. To choose which, you
+must edit the script file. Assign the desired dataset to the `TASK`
+variable:
 
 ``` bash
 TASK="PCBA" # DUDE or PCBA
@@ -381,8 +382,8 @@ and the system will produce a list of molecules ranked according to (the
 maximum of) their compatibility with the pockets.
 
 Retrieval is done by executing the shell script
-`external/DrugCLIP/retrieval.sh`. Read the comments in that file to see
-how to configure it.
+[`external/DrugCLIP/retrieval.sh`](external/DrugCLIP/retrieval.sh). Read
+the comments in that file to see how to configure it.
 
 ``` bash
 cd ./external/DrugCLIP
