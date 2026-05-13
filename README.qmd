@@ -1,6 +1,9 @@
 ---
 title: "BioSensIA-DC"
-format: gfm
+format: 
+   gfm:
+      toc: true
+      toc-depth: 4
 lang: en
 engine: knitr
 execute: 
@@ -12,7 +15,9 @@ execute:
 
 ---
   
-Welcome to the repository for the **BioSensIA-DC prototype**. This is work in progress.
+## Welcome to the repository for the **BioSensIA-DC prototype**
+
+This is work in progress.
 
 
 ## What BioSensIA-DC is
@@ -24,7 +29,7 @@ BioSensIA-DC is based on [DrugCLIP](https://github.com/bowen-gao/DrugCLIP), whic
 
 ## System requirements
 
-We have run BioSensIA-DC on GNU-Linux only. If you have been able to run it on other operating systems, please let us know.
+We have run BioSensIA-DC on GNU-Linux only. If you have been able to run it on other operating systems, [please let us know](https://github.com/fnaufel/BioSensIA-DC/issues/new/choose).
 
 The software dependencies of BioSensIA are described below.
 
@@ -307,7 +312,7 @@ To check whether Uni-Core is using the GPU(s), look for something like this in t
 ```
 
 
-### Download DrugCLIP data 
+### Download and install DrugCLIP data 
 
 The [DrugCLIP README](external/DrugCLIP/README.md) says that train data, the trained checkpoint and the test data for DUD-E can be found at  <https://drive.google.com/drive/folders/1zW1MGpgunynFxTKXC2Q4RgWxZmg6CInV>.
 

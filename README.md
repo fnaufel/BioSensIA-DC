@@ -1,8 +1,39 @@
 # BioSensIA-DC
 
 
-Welcome to the repository for the **BioSensIA-DC prototype**. This is
-work in progress.
+- [Welcome to the repository for the **BioSensIA-DC
+  prototype**](#welcome-to-the-repository-for-the-biosensia-dc-prototype)
+- [What BioSensIA-DC is](#what-biosensia-dc-is)
+- [System requirements](#system-requirements)
+- [How to install BioSensIA-DC](#how-to-install-biosensia-dc)
+  - [Install `uv`](#install-uv)
+  - [Check your CUDA driver](#check-your-cuda-driver)
+  - [Clone this repo](#clone-this-repo)
+  - [Edit `pyproject.toml` to set correct values for your
+    system](#edit-pyprojecttoml-to-set-correct-values-for-your-system)
+  - [Use `uv` to install the
+    dependencies](#use-uv-to-install-the-dependencies)
+  - [Activate the virtual
+    environment](#activate-the-virtual-environment)
+  - [Confirm everything is ok so far](#confirm-everything-is-ok-so-far)
+    - [Python version](#python-version)
+    - [PyTorch with GPU access](#pytorch-with-gpu-access)
+    - [RDKit](#rdkit)
+  - [Install Uni-Core](#install-uni-core)
+  - [Confirm Uni-Core install is ok](#confirm-uni-core-install-is-ok)
+  - [Download and install DrugCLIP
+    data](#download-and-install-drugclip-data)
+  - [Make the script files
+    executable](#make-the-script-files-executable)
+- [How to use BioSensIA-DC](#how-to-use-biosensia-dc)
+  - [To run the original DrugCLIP](#to-run-the-original-drugclip)
+    - [Benchmarks](#benchmarks)
+    - [Retrieval (virtual screening)](#retrieval-virtual-screening)
+    - [Training](#training)
+
+## Welcome to the repository for the **BioSensIA-DC prototype**
+
+This is work in progress.
 
 ## What BioSensIA-DC is
 
@@ -19,7 +50,8 @@ paper](https://openreview.net/forum?id=6K2RM6wVqKu).
 ## System requirements
 
 We have run BioSensIA-DC on GNU-Linux only. If you have been able to run
-it on other operating systems, please let us know.
+it on other operating systems, [please let us
+know](https://github.com/fnaufel/BioSensIA-DC/issues/new/choose).
 
 The software dependencies of BioSensIA are described below.
 
@@ -306,7 +338,7 @@ this in the output of `train_bert_test.sh`:
 
     2026-04-20 11:17:29 | INFO | unicore_cli.train | training on 2 devices (GPUs)
 
-### Download DrugCLIP data
+### Download and install DrugCLIP data
 
 The [DrugCLIP README](external/DrugCLIP/README.md) says that train data,
 the trained checkpoint and the test data for DUD-E can be found at
