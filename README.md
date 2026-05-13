@@ -370,10 +370,56 @@ cd ./external/DrugCLIP
 ./test.sh
 ```
 
-#### Retrieval
+Because of hard-coded constraints in the original DrugCLIP code, a GPU
+must be available for the script to run.
 
-???
+#### Retrieval (virtual screening)
+
+The DrugCLIP code in the original repository will only do **virtual
+screening**: you can submit a query consisting of one or more pockets,
+and the system will produce a list of molecules ranked according to (the
+maximum of) their compatibility with the pockets.
+
+Retrieval is done by executing the shell script
+`external/DrugCLIP/retrieval.sh`. Read the comments in that file to see
+how to configure it.
+
+``` bash
+cd ./external/DrugCLIP
+./retrieval.sh
+```
+
+The default list of candidate molecules is contained in
+`external/DrugCLIP/mols.lmdb`.
+
+The list of query pockets must be contained in a file whose path is the
+value of the `POCKET_PATH` variable in the script.
+
+The directory `external/DrugCLIP/data/pdb/combine_set/` contains binding
+data of a total of 23496 biomolecular complexes, including
+protein-ligand (19443), nucleic acid-ligand (149), protein-nucleic acid
+(1052), and protein-protein complexes (2852). See
+`external/DrugCLIP/data/pdb/combine_set/readme/PDBbind-101.txt` for more
+details.
+
+We have implemented a Python function to search this data and produce an
+LMDB file containing the pockets specified in the arguments. See
+[`biosensia_retrieval.py#create_pocket_lmdb`](biosensia_retrieval.py#create_pocket_lmdb)
+for more details.
+
+The first time the retrieval script is run, DrugCLIP must generate
+embeddings for **all** of the candidate molecules. This may take hours.
+The generated embeddings are saved to a file in the directory specified
+by the `EMB_DIR` variable. Subsequent runs with the same set of
+candidate molecules will be much faster, as they will use these saved
+embeddings.
+
+The ranked list of molecules will be saved in a TSV file named
+`ranked_compounds.txt`, located in the same directory as the saved
+embeddings. Each line of the file will contain the SMILES formula of the
+molecule and its score (the maximum value of its compatibility with any
+pocket in the query).
 
 #### Training
 
-???
+\<\<\<To be detailed later.\>\>\>
