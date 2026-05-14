@@ -23,6 +23,7 @@ def _():
     import polars as pl
     import altair as alt
 
+    alt.data_transformers.enable("vegafusion")
     return alt, bsia
 
 
@@ -38,7 +39,7 @@ def _(mo):
 
 @app.cell
 def _(bsia):
-    df = bsia.build_candidate_pockets_frame(lmdb_path='../data/candidate_pockets.lmdb')
+    df = bsia.build_candidate_pockets_frame(lmdb_path='data/candidate_pockets.lmdb')
     return (df,)
 
 
@@ -69,7 +70,7 @@ def _(alt, df):
         )
     )
     chart
-    return (chart,)
+    return
 
 
 if __name__ == "__main__":
