@@ -1,3 +1,4 @@
+import pickle
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from biosensia_target_fishing import build_candidate_pockets_lmdb
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMBINE_SET_DIR = REPO_ROOT / "external/DrugCLIP/data/pdb/combine_set"
 TWO_IE_FOUR_DIR = COMBINE_SET_DIR / "2ie4"
+TWO_R_ONE_W_DIR = COMBINE_SET_DIR / "2r1w"
 
 
 def test_build_candidate_pockets_lmdb_writes_encoder_schema(tmp_path):
@@ -54,6 +56,40 @@ def test_build_candidate_pockets_lmdb_raises_for_invalid_bundle_by_default(tmp_p
             tmp_path / "candidate_pockets.lmdb",
             combine_set_dir=combine_set_dir,
         )
+
+
+def test_build_candidate_pockets_lmdb_falls_back_from_empty_data_pkl_to_pocket_pdb(
+    tmp_path,
+):
+    combine_set_dir = tmp_path / "combine_set"
+    bundle_dir = combine_set_dir / "2r1w"
+    bundle_dir.mkdir(parents=True)
+    with (bundle_dir / "data.pkl").open("wb") as handle:
+        pickle.dump(
+            {
+                "pocket": "2r1w",
+                "pocket_atoms": [],
+                "pocket_coordinates": [],
+            },
+            handle,
+        )
+    shutil.copy(TWO_R_ONE_W_DIR / "2r1w_pocket.pdb", bundle_dir / "2r1w_pocket.pdb")
+
+    output_path = tmp_path / "candidate_pockets.lmdb"
+    summary = build_candidate_pockets_lmdb(
+        output_path,
+        combine_set_dir=combine_set_dir,
+    )
+
+    assert summary["candidate_dirs"] == 1
+    assert summary["pockets"] == 1
+    assert summary["skipped"] == 0
+
+    record = read_lmdb_records(output_path)[0]
+    assert set(record) == {"pocket", "pocket_atoms", "pocket_coordinates"}
+    assert record["pocket"] == "2r1w"
+    assert len(record["pocket_atoms"]) == 216
+    assert np.asarray(record["pocket_coordinates"]).shape == (216, 3)
 
 
 def test_build_candidate_pockets_lmdb_can_skip_invalid_bundles(tmp_path):

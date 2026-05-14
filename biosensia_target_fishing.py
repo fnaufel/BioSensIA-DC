@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pickle
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,8 +15,11 @@ from tqdm import tqdm
 from biosensia_retrieval import (
     DEFAULT_COMBINE_SET_DIR,
     DEFAULT_POCKET_RADIUS_ANGSTROM,
-    _build_local_pocket_record,
+    _first_existing,
     _normalize_pocket_record,
+    _record_from_data_pkl,
+    _record_from_pocket_pdb,
+    _record_from_protein_and_ligand,
 )
 
 
@@ -113,7 +117,7 @@ def build_candidate_pockets_lmdb(
             unit="pocket",
         ):
             try:
-                record, _source = _build_local_pocket_record(
+                record, _source = _build_candidate_pocket_record(
                     pdb_id,
                     bundle_dir,
                     radius=radius,
@@ -189,6 +193,115 @@ def _iter_candidate_bundle_dirs(combine_set_dir: Path) -> list[tuple[str, Path]]
         for path in sorted(combine_set_dir.iterdir())
         if path.is_dir() and _PDB_ID_RE.fullmatch(path.name)
     ]
+
+
+def _build_candidate_pocket_record(
+    pdb_id: str,
+    bundle_dir: Path,
+    *,
+    radius: float,
+    prefer_data_pkl: bool,
+    include_pocket_hetatm: bool,
+) -> tuple[dict[str, Any], str]:
+    errors: list[str] = []
+
+    data_pkl = bundle_dir / "data.pkl"
+    if prefer_data_pkl and data_pkl.exists():
+        result = _try_candidate_record(
+            "data.pkl",
+            str(data_pkl),
+            lambda: _record_from_data_pkl(data_pkl, pocket_name=pdb_id),
+            pdb_id,
+            errors,
+        )
+        if result is not None:
+            return result
+
+    protein_path = _first_existing(
+        [
+            bundle_dir / f"{pdb_id}_protein.pdb",
+            bundle_dir / "receptor.pdb",
+            bundle_dir / f"{pdb_id}.pdb",
+        ],
+        fallback_globs=[
+            (bundle_dir, "*_protein.pdb"),
+            (bundle_dir, "receptor*.pdb"),
+        ],
+    )
+    ligand_path = _first_existing(
+        [
+            bundle_dir / f"{pdb_id}_ligand.mol2",
+            bundle_dir / "crystal_ligand.mol2",
+            bundle_dir / f"{pdb_id}_ligand.sdf",
+            bundle_dir / "crystal_ligand.sdf",
+        ],
+        fallback_globs=[
+            (bundle_dir, "*_ligand.mol2"),
+            (bundle_dir, "*ligand*.mol2"),
+            (bundle_dir, "*_ligand.sdf"),
+            (bundle_dir, "*ligand*.sdf"),
+        ],
+    )
+    if protein_path is not None and ligand_path is not None:
+        result = _try_candidate_record(
+            "protein+ligand",
+            f"{protein_path} + {ligand_path}",
+            lambda: _record_from_protein_and_ligand(
+                protein_path,
+                ligand_path,
+                pocket_name=pdb_id,
+                radius=radius,
+            ),
+            pdb_id,
+            errors,
+        )
+        if result is not None:
+            return result
+
+    pocket_pdb = _first_existing(
+        [
+            bundle_dir / f"{pdb_id}_pocket.pdb",
+            bundle_dir / f"{pdb_id}_pocket6A.pdb",
+            bundle_dir / "pocket.pdb",
+        ],
+        fallback_globs=[
+            (bundle_dir, "*_pocket.pdb"),
+            (bundle_dir, "*pocket*.pdb"),
+        ],
+    )
+    if pocket_pdb is not None:
+        result = _try_candidate_record(
+            "pocket PDB",
+            str(pocket_pdb),
+            lambda: _record_from_pocket_pdb(
+                pocket_pdb,
+                pocket_name=pdb_id,
+                include_hetatm=include_pocket_hetatm,
+            ),
+            pdb_id,
+            errors,
+        )
+        if result is not None:
+            return result
+
+    if errors:
+        raise ValueError("; ".join(errors))
+    raise FileNotFoundError(f"No usable pocket data found in {bundle_dir}")
+
+
+def _try_candidate_record(
+    source_kind: str,
+    source: str,
+    build_record: Callable[[], dict[str, Any]],
+    pdb_id: str,
+    errors: list[str],
+) -> tuple[dict[str, Any], str] | None:
+    try:
+        record = build_record()
+        return _normalize_pocket_record(record, fallback_name=pdb_id), source
+    except Exception as exc:
+        errors.append(f"{source_kind} ({source}): {exc}")
+        return None
 
 
 __all__ = ["DEFAULT_CANDIDATE_POCKETS_LMDB", "build_candidate_pockets_lmdb"]
