@@ -21,3 +21,4 @@ external/Uni-Core/examples/bert/save
 # R project
 .Rproj.user/
 *.Rproj
+/data/candidate_pockets.lmdb
