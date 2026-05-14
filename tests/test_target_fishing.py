@@ -6,7 +6,10 @@ import numpy as np
 import pytest
 
 from biosensia_retrieval import read_lmdb_records
-from biosensia_target_fishing import build_candidate_pockets_lmdb
+from biosensia_target_fishing import (
+    build_candidate_pockets_frame,
+    build_candidate_pockets_lmdb,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +48,20 @@ def test_build_candidate_pockets_lmdb_writes_encoder_schema(tmp_path):
     assert len(records[0]["pocket_atoms"]) == 546
     assert np.asarray(records[0]["pocket_coordinates"]).shape == (546, 3)
     assert np.asarray(records[0]["pocket_coordinates"]).dtype == np.float32
+
+
+def test_build_candidate_pockets_frame_reads_pocket_atom_counts(tmp_path):
+    combine_set_dir = tmp_path / "combine_set"
+    bundle_dir = combine_set_dir / "2ie4"
+    bundle_dir.mkdir(parents=True)
+    shutil.copy(TWO_IE_FOUR_DIR / "data.pkl", bundle_dir / "data.pkl")
+    output_path = tmp_path / "candidate_pockets.lmdb"
+    build_candidate_pockets_lmdb(output_path, combine_set_dir=combine_set_dir)
+
+    df = build_candidate_pockets_frame(output_path)
+
+    assert df.columns == ["pocket", "pocket_atoms"]
+    assert df.to_dicts() == [{"pocket": "2ie4", "pocket_atoms": 546}]
 
 
 def test_build_candidate_pockets_lmdb_raises_for_invalid_bundle_by_default(tmp_path):

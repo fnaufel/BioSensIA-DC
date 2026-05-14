@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import lmdb
+import polars as pl
 from tqdm import tqdm
 
 from biosensia_retrieval import (
@@ -182,6 +183,47 @@ def build_candidate_pockets_lmdb(
     }
 
 
+def build_candidate_pockets_frame(
+    lmdb_path: str | Path = DEFAULT_CANDIDATE_POCKETS_LMDB,
+) -> pl.DataFrame:
+    """Read a candidate-pocket LMDB into a compact Polars dataframe."""
+
+    lmdb_path = Path(lmdb_path)
+    rows: list[dict[str, Any]] = []
+    env = lmdb.open(
+        str(lmdb_path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with env.begin() as transaction:
+            for index in range(env.stat()["entries"]):
+                value = transaction.get(str(index).encode("ascii"))
+                if value is None:
+                    raise KeyError(f"Missing numeric LMDB key {index} in {lmdb_path}")
+                record = pickle.loads(value)
+                rows.append(
+                    {
+                        "pocket": str(record["pocket"]),
+                        "pocket_atoms": len(record["pocket_atoms"]),
+                    }
+                )
+    finally:
+        env.close()
+
+    return pl.DataFrame(
+        rows,
+        schema={
+            "pocket": pl.String,
+            "pocket_atoms": pl.Int64,
+        },
+    )
+
+
 def _iter_candidate_bundle_dirs(combine_set_dir: Path) -> list[tuple[str, Path]]:
     if not combine_set_dir.exists():
         raise FileNotFoundError(f"combine_set directory not found: {combine_set_dir}")
@@ -304,4 +346,8 @@ def _try_candidate_record(
         return None
 
 
-__all__ = ["DEFAULT_CANDIDATE_POCKETS_LMDB", "build_candidate_pockets_lmdb"]
+__all__ = [
+    "DEFAULT_CANDIDATE_POCKETS_LMDB",
+    "build_candidate_pockets_frame",
+    "build_candidate_pockets_lmdb",
+]
