@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import lmdb
+from tqdm import tqdm
 
 from biosensia_retrieval import (
     DEFAULT_COMBINE_SET_DIR,
@@ -106,7 +107,11 @@ def build_candidate_pockets_lmdb(
     )
     transaction = env.begin(write=True)
     try:
-        for pdb_id, bundle_dir in bundle_dirs:
+        for pdb_id, bundle_dir in tqdm(
+            bundle_dirs,
+            desc="Building candidate pockets LMDB",
+            unit="pocket",
+        ):
             try:
                 record, _source = _build_local_pocket_record(
                     pdb_id,
