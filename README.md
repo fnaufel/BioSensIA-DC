@@ -406,6 +406,10 @@ cd ./external/DrugCLIP
 Because of hard-coded constraints in the original DrugCLIP code, a GPU
 must be available for the script to run.
 
+A good sanity check is to compare the values output by these runs to the
+values reported in Sections 4.1 and 4.2 of the [DrugCLIP
+paper](https://arxiv.org/pdf/2310.06367.pdf).
+
 #### Retrieval (virtual screening)
 
 The DrugCLIP code in the original repository will only do **virtual
