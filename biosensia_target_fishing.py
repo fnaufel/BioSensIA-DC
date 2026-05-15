@@ -5,13 +5,20 @@ from __future__ import annotations
 import os
 import pickle
 import re
-from collections.abc import Callable
+import shutil
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
 import lmdb
+import numpy as np
 import polars as pl
-from tqdm import tqdm
+from rdkit import Chem, rdBase
+from rdkit.Chem import AllChem
+from tqdm.auto import tqdm
 
 from biosensia_retrieval import (
     DEFAULT_COMBINE_SET_DIR,
@@ -21,12 +28,143 @@ from biosensia_retrieval import (
     _record_from_data_pkl,
     _record_from_pocket_pdb,
     _record_from_protein_and_ligand,
+    _write_lmdb,
 )
 
 
 DEFAULT_CANDIDATE_POCKETS_LMDB = Path("data/candidate_pockets.lmdb")
+DEFAULT_DRUGCLIP_MOLS_LMDB = Path("external/DrugCLIP/mols.lmdb")
+DEFAULT_MOL_DOWNLOAD_DIR = Path("data/molecules")
+PUBCHEM_SDF_URL = (
+    "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/"
+    "{namespace}/{identifier}/SDF?record_type={record_type}"
+)
+PUBCHEM_USER_AGENT = "BioSensIA-DC/0.1 (molecule LMDB preparation)"
 
 _PDB_ID_RE = re.compile(r"^[0-9][0-9A-Za-z]{3}$")
+_MOL_SLUG_RE = re.compile(r"[^0-9A-Za-z_.-]+")
+
+
+def create_mol_lmdb(
+    molecules: Iterable[str],
+    output_path: str | Path,
+    *,
+    source_lmdb_path: str | Path = DEFAULT_DRUGCLIP_MOLS_LMDB,
+    work_dir: str | Path | None = None,
+    download_missing: bool = True,
+    overwrite: bool = True,
+    map_size: int = 1 << 40,
+    timeout_seconds: float = 60,
+    random_seed: int = 1,
+    show_progress: bool = True,
+) -> list[dict[str, Any]]:
+    """Create a DrugCLIP molecule LMDB for one or more molecules.
+
+    The output records intentionally match the schema consumed by
+    ``DrugCLIPTask.load_retrieval_mols_dataset``:
+
+    ``{"atoms": list[str], "coordinates": list[ndarray], "smi": str}``
+
+    Parameters
+    ----------
+    molecules:
+        Molecule identifiers. SMILES strings are supported directly. DrugCLIP
+        IDs are matched against the local source LMDB. Missing molecules are
+        resolved through PubChem when ``download_missing`` is true; use
+        ``cid:2244`` or ``2244`` for a PubChem CID, or a PubChem compound name.
+    output_path:
+        Destination LMDB file path.
+    source_lmdb_path:
+        Existing DrugCLIP molecule LMDB to search first. Defaults to
+        ``external/DrugCLIP/mols.lmdb``.
+    work_dir:
+        Directory used for downloaded molecule SDF files. Defaults to
+        ``data/molecules``.
+    download_missing:
+        Download missing molecules from PubChem. If PubChem cannot resolve a
+        SMILES string, a 3D conformer is generated locally from the SMILES.
+    overwrite:
+        Replace an existing output LMDB file.
+    map_size:
+        LMDB map size.
+    timeout_seconds:
+        Network timeout for PubChem downloads.
+    random_seed:
+        RDKit conformer generation seed for downloaded 2D records or local
+        SMILES fallback.
+    show_progress:
+        Show progress while scanning the source LMDB and reporting fallback
+        download/generation steps.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Build summaries for each requested molecule.
+    """
+
+    if isinstance(molecules, str):
+        molecule_queries = [_normalize_molecule_query(molecules)]
+    else:
+        molecule_queries = [
+            _normalize_molecule_query(molecule) for molecule in molecules
+        ]
+    if not molecule_queries:
+        raise ValueError("molecules must contain at least one molecule identifier")
+
+    source_lmdb_path = Path(source_lmdb_path)
+    work_dir = Path(work_dir) if work_dir is not None else DEFAULT_MOL_DOWNLOAD_DIR
+
+    local_records = _find_molecule_records_in_lmdb(
+        molecule_queries,
+        source_lmdb_path,
+        show_progress=show_progress,
+    )
+
+    records: list[dict[str, Any]] = []
+    summaries: list[dict[str, Any]] = []
+    for molecule_index, query in enumerate(molecule_queries):
+        found = local_records.get(molecule_index)
+        if found is None:
+            if not download_missing:
+                raise FileNotFoundError(
+                    f"No usable local molecule data found for {query['query']!r} "
+                    f"in {source_lmdb_path}"
+                )
+            if show_progress:
+                tqdm.write(
+                    f"Did not find {query['query']!r} in {source_lmdb_path}; "
+                    "trying PubChem/download fallback."
+                )
+            record, source = _download_molecule_record(
+                query["query"],
+                work_dir=work_dir / _safe_molecule_slug(query["query"]),
+                timeout_seconds=timeout_seconds,
+                random_seed=random_seed,
+                show_progress=show_progress,
+            )
+        else:
+            record, source = found
+            if show_progress:
+                tqdm.write(f"Found {query['query']!r} in {source}.")
+
+        record = _normalize_molecule_record(record, fallback_smiles=query["query"])
+        records.append(record)
+        summaries.append(
+            {
+                "molecule": query["query"],
+                "smiles": record["smi"],
+                "source": source,
+                "molecule_index": molecule_index,
+                "molecule_atoms": len(record["atoms"]),
+                "conformers": len(record["coordinates"]),
+                "output_path": str(output_path),
+            }
+        )
+
+    if show_progress:
+        tqdm.write(f"Writing {len(records)} molecule record(s) to {output_path}.")
+    _write_lmdb(records, output_path, overwrite=overwrite, map_size=map_size)
+    return summaries
 
 
 def build_candidate_pockets_lmdb(
@@ -346,8 +484,372 @@ def _try_candidate_record(
         return None
 
 
+def _normalize_molecule_query(molecule: str) -> dict[str, Any]:
+    query = str(molecule).strip()
+    if not query:
+        raise ValueError("molecule identifiers must be non-empty strings")
+
+    variants = {query, query.lower()}
+    canonical_smiles = _canonical_smiles(query)
+    if canonical_smiles is not None:
+        variants.add(canonical_smiles)
+
+    return {
+        "query": query,
+        "variants": variants,
+        "canonical_smiles": canonical_smiles,
+    }
+
+
+def _find_molecule_records_in_lmdb(
+    molecule_queries: list[dict[str, Any]],
+    source_lmdb_path: Path,
+    *,
+    show_progress: bool,
+) -> dict[int, tuple[dict[str, Any], str]]:
+    if not source_lmdb_path.exists():
+        if show_progress:
+            tqdm.write(f"Source molecule LMDB not found: {source_lmdb_path}")
+        return {}
+
+    lookup: dict[str, list[int]] = {}
+    for query_index, query in enumerate(molecule_queries):
+        for variant in query["variants"]:
+            lookup.setdefault(variant, []).append(query_index)
+
+    found: dict[int, tuple[dict[str, Any], str]] = {}
+    env = lmdb.open(
+        str(source_lmdb_path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    progress = None
+    pending_progress = 0
+    try:
+        with env.begin() as transaction:
+            if show_progress:
+                progress = tqdm(
+                    total=env.stat()["entries"],
+                    desc=f"Searching {source_lmdb_path.name}",
+                    unit="record",
+                )
+            for key, value in transaction.cursor():
+                if progress is not None:
+                    pending_progress += 1
+                    if pending_progress >= 1000:
+                        progress.update(pending_progress)
+                        pending_progress = 0
+
+                if len(found) == len(molecule_queries):
+                    break
+
+                record = pickle.loads(value)
+                matches = _matched_molecule_query_indices(record, lookup)
+                if not matches:
+                    continue
+
+                source = f"{source_lmdb_path}:{key.decode('ascii', errors='replace')}"
+                for query_index in matches:
+                    if query_index in found:
+                        continue
+                    found[query_index] = (
+                        _normalize_molecule_record(
+                            record,
+                            fallback_smiles=molecule_queries[query_index]["query"],
+                        ),
+                        source,
+                    )
+                if len(found) == len(molecule_queries):
+                    break
+    finally:
+        if progress is not None:
+            if pending_progress:
+                progress.update(pending_progress)
+            progress.close()
+        env.close()
+
+    return found
+
+
+def _matched_molecule_query_indices(
+    record: dict[str, Any],
+    lookup: dict[str, list[int]],
+) -> list[int]:
+    matched: list[int] = []
+    for identifier in _molecule_record_identifiers(record):
+        matched.extend(lookup.get(identifier, []))
+    return matched
+
+
+def _molecule_record_identifiers(record: dict[str, Any]) -> set[str]:
+    identifiers: set[str] = set()
+    if record.get("smi"):
+        identifiers.add(str(record["smi"]).strip())
+
+    for key in ("IDs", "id", "name"):
+        value = record.get(key)
+        for item in _iter_string_values(value):
+            identifiers.add(item)
+            identifiers.add(item.lower())
+    return identifiers
+
+
+def _iter_string_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    item = str(value).strip()
+    return [item] if item else []
+
+
+def _download_molecule_record(
+    molecule: str,
+    *,
+    work_dir: Path,
+    timeout_seconds: float,
+    random_seed: int,
+    show_progress: bool,
+) -> tuple[dict[str, Any], str]:
+    work_dir.mkdir(parents=True, exist_ok=True)
+    errors: list[str] = []
+
+    for namespace, identifier in _pubchem_identifier_candidates(molecule):
+        for record_type, force_embed in (("3d", False), ("2d", True)):
+            target_path = work_dir / f"pubchem_{namespace}_{record_type}.sdf"
+            try:
+                if show_progress:
+                    if target_path.exists():
+                        tqdm.write(f"Using cached PubChem SDF: {target_path}")
+                    else:
+                        tqdm.write(
+                            f"Downloading PubChem {record_type.upper()} SDF "
+                            f"for {molecule!r}."
+                        )
+                _ensure_pubchem_sdf(
+                    namespace,
+                    identifier,
+                    target_path,
+                    record_type=record_type,
+                    timeout_seconds=timeout_seconds,
+                )
+                record = _record_from_molecule_sdf(
+                    target_path,
+                    fallback_smiles=molecule,
+                    force_embed=force_embed,
+                    random_seed=random_seed,
+                )
+                record.setdefault("subset", "pubchem")
+                if namespace == "cid":
+                    record.setdefault("IDs", f"CID:{identifier}")
+                return record, str(target_path)
+            except Exception as exc:
+                errors.append(f"PubChem {namespace}/{record_type}: {exc}")
+
+    canonical_smiles = _canonical_smiles(molecule)
+    if canonical_smiles is not None:
+        if show_progress:
+            tqdm.write(f"Generating RDKit conformer for {canonical_smiles!r}.")
+        record = _record_from_smiles(
+            canonical_smiles,
+            random_seed=random_seed,
+        )
+        record.setdefault("subset", "generated_from_smiles")
+        return record, f"generated from SMILES:{canonical_smiles}"
+
+    raise FileNotFoundError(
+        f"Could not download molecule data for {molecule!r}. "
+        + "; ".join(errors)
+    )
+
+
+def _pubchem_identifier_candidates(molecule: str) -> list[tuple[str, str]]:
+    stripped = molecule.strip()
+    lower = stripped.lower()
+    if lower.startswith("cid:"):
+        cid = stripped.split(":", 1)[1].strip()
+        return [("cid", cid)] if cid else []
+    if stripped.isdigit():
+        return [("cid", stripped)]
+
+    quoted = urllib.parse.quote(stripped, safe="")
+    if _canonical_smiles(stripped) is not None:
+        return [("smiles", quoted)]
+    return [("name", quoted)]
+
+
+def _ensure_pubchem_sdf(
+    namespace: str,
+    identifier: str,
+    target_path: Path,
+    *,
+    record_type: str,
+    timeout_seconds: float,
+) -> None:
+    if target_path.exists():
+        return
+
+    url = PUBCHEM_SDF_URL.format(
+        namespace=namespace,
+        identifier=identifier,
+        record_type=record_type,
+    )
+    request = urllib.request.Request(url, headers={"User-Agent": PUBCHEM_USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            with target_path.open("wb") as handle:
+                shutil.copyfileobj(response, handle)
+    except urllib.error.HTTPError as exc:
+        raise FileNotFoundError(f"{url} returned HTTP {exc.code}") from exc
+
+
+def _record_from_molecule_sdf(
+    path: Path,
+    *,
+    fallback_smiles: str,
+    force_embed: bool,
+    random_seed: int,
+) -> dict[str, Any]:
+    supplier = Chem.SDMolSupplier(str(path), removeHs=False, sanitize=True)
+    mol = next((item for item in supplier if item is not None), None)
+    if mol is None:
+        raise ValueError(f"No molecule found in SDF {path}")
+    return _record_from_rdkit_mol(
+        mol,
+        fallback_smiles=fallback_smiles,
+        force_embed=force_embed,
+        random_seed=random_seed,
+    )
+
+
+def _record_from_smiles(smiles: str, *, random_seed: int) -> dict[str, Any]:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES string: {smiles!r}")
+    return _record_from_rdkit_mol(
+        mol,
+        fallback_smiles=smiles,
+        force_embed=True,
+        random_seed=random_seed,
+    )
+
+
+def _record_from_rdkit_mol(
+    mol: Chem.Mol,
+    *,
+    fallback_smiles: str,
+    force_embed: bool,
+    random_seed: int,
+) -> dict[str, Any]:
+    working_mol = Chem.Mol(mol)
+    if force_embed or working_mol.GetNumConformers() == 0:
+        working_mol = _embed_molecule_3d(working_mol, random_seed=random_seed)
+
+    working_mol = Chem.RemoveHs(working_mol)
+    if working_mol.GetNumConformers() == 0:
+        raise ValueError("Molecule has no conformer")
+
+    conformer = working_mol.GetConformer(0)
+    atoms = [atom.GetSymbol() for atom in working_mol.GetAtoms()]
+    coordinates = np.asarray(conformer.GetPositions(), dtype=np.float32)
+    smiles = _canonical_smiles(Chem.MolToSmiles(working_mol)) or fallback_smiles
+    return {
+        "atoms": atoms,
+        "coordinates": [coordinates],
+        "smi": smiles,
+    }
+
+
+def _embed_molecule_3d(mol: Chem.Mol, *, random_seed: int) -> Chem.Mol:
+    working_mol = Chem.AddHs(mol)
+    params = AllChem.ETKDGv3()
+    params.randomSeed = int(random_seed)
+    status = AllChem.EmbedMolecule(working_mol, params)
+    if status != 0:
+        status = AllChem.EmbedMolecule(working_mol, useRandomCoords=True)
+    if status != 0:
+        raise ValueError(f"Could not generate conformer for {Chem.MolToSmiles(mol)}")
+
+    try:
+        AllChem.MMFFOptimizeMolecule(working_mol)
+    except Exception:
+        AllChem.UFFOptimizeMolecule(working_mol)
+    return working_mol
+
+
+def _normalize_molecule_record(
+    record: dict[str, Any],
+    *,
+    fallback_smiles: str,
+) -> dict[str, Any]:
+    atoms = [str(atom).strip() for atom in record["atoms"]]
+    coordinates = _normalize_molecule_coordinates(record["coordinates"], len(atoms))
+    if not atoms:
+        raise ValueError("atoms must contain at least one atom")
+
+    normalized = dict(record)
+    normalized["atoms"] = atoms
+    normalized["coordinates"] = coordinates
+    normalized["smi"] = str(record.get("smi") or fallback_smiles)
+    return normalized
+
+
+def _normalize_molecule_coordinates(
+    coordinates: Any,
+    expected_atoms: int,
+) -> list[np.ndarray]:
+    if isinstance(coordinates, np.ndarray):
+        if coordinates.ndim == 2:
+            conformers = [coordinates]
+        elif coordinates.ndim == 3:
+            conformers = [coordinates[index] for index in range(coordinates.shape[0])]
+        else:
+            raise ValueError(
+                f"coordinates must have 2 or 3 dimensions, got {coordinates.shape}"
+            )
+    else:
+        conformers = list(coordinates)
+
+    if not conformers:
+        raise ValueError("coordinates must contain at least one conformer")
+
+    normalized: list[np.ndarray] = []
+    for conformer in conformers:
+        array = np.asarray(conformer, dtype=np.float32)
+        if array.ndim != 2 or array.shape[1] != 3:
+            raise ValueError(
+                f"each conformer must have shape (n_atoms, 3), got {array.shape}"
+            )
+        if array.shape[0] != expected_atoms:
+            raise ValueError(
+                "atoms and conformer coordinates must have the same length "
+                f"({expected_atoms} != {array.shape[0]})"
+            )
+        normalized.append(array)
+    return normalized
+
+
+def _canonical_smiles(molecule: str) -> str | None:
+    with rdBase.BlockLogs():
+        mol = Chem.MolFromSmiles(str(molecule))
+    if mol is None:
+        return None
+    return Chem.MolToSmiles(mol, canonical=True)
+
+
+def _safe_molecule_slug(molecule: str) -> str:
+    slug = _MOL_SLUG_RE.sub("_", molecule.strip())[:80].strip("._")
+    return slug or "molecule"
+
+
 __all__ = [
     "DEFAULT_CANDIDATE_POCKETS_LMDB",
+    "DEFAULT_DRUGCLIP_MOLS_LMDB",
     "build_candidate_pockets_frame",
     "build_candidate_pockets_lmdb",
+    "create_mol_lmdb",
 ]
