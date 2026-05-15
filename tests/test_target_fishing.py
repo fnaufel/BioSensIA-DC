@@ -10,6 +10,7 @@ from biosensia_retrieval import read_lmdb_records
 from biosensia_target_fishing import (
     build_candidate_pockets_frame,
     build_candidate_pockets_lmdb,
+    build_mol_lmdb_index,
     create_mol_lmdb,
 )
 
@@ -244,6 +245,105 @@ def test_create_mol_lmdb_matches_source_by_drugclip_id(tmp_path):
     assert summaries[0]["smiles"] == "N"
     assert summaries[0]["source"] == f"{source_path}:0"
     assert read_lmdb_records(output_path)[0]["IDs"] == "F0007-0960"
+
+
+def test_build_mol_lmdb_index_supports_fast_smiles_and_id_lookup(
+    monkeypatch,
+    tmp_path,
+):
+    source_path = tmp_path / "source_mols.lmdb"
+    write_test_lmdb(
+        source_path,
+        [
+            {
+                "atoms": ["C", "C", "O"],
+                "coordinates": [np.ones((3, 3), dtype=np.float32)],
+                "smi": "CCO",
+                "IDs": "ethanol-record",
+            },
+            {
+                "atoms": ["N"],
+                "coordinates": [np.zeros((1, 3), dtype=np.float32)],
+                "smi": "N",
+                "IDs": "nitrogen-record",
+            },
+        ],
+    )
+    index_path = tmp_path / "mols_index.lmdb"
+
+    summary = build_mol_lmdb_index(
+        index_path,
+        source_lmdb_path=source_path,
+        show_progress=False,
+    )
+
+    assert summary == {
+        "index_path": str(index_path),
+        "source_lmdb_path": str(source_path),
+        "source_entries": 2,
+        "indexed_records": 2,
+        "lookup_values": 4,
+    }
+
+    def fail_sequential_scan(*args, **kwargs):
+        raise AssertionError("sequential scan should not be used")
+
+    monkeypatch.setattr(
+        "biosensia_target_fishing._find_molecule_records_in_lmdb",
+        fail_sequential_scan,
+    )
+
+    smiles_output_path = tmp_path / "mols_from_smiles.lmdb"
+    smiles_summaries = create_mol_lmdb(
+        ["OCC"],
+        smiles_output_path,
+        source_lmdb_path=source_path,
+        mol_index_path=index_path,
+        download_missing=False,
+        show_progress=False,
+    )
+    assert smiles_summaries[0]["source"] == f"{source_path}:0"
+    assert read_lmdb_records(smiles_output_path)[0]["smi"] == "CCO"
+
+    id_output_path = tmp_path / "mols_from_id.lmdb"
+    id_summaries = create_mol_lmdb(
+        ["nitrogen-record"],
+        id_output_path,
+        source_lmdb_path=source_path,
+        mol_index_path=index_path,
+        download_missing=False,
+        show_progress=False,
+    )
+    assert id_summaries[0]["source"] == f"{source_path}:1"
+    assert read_lmdb_records(id_output_path)[0]["smi"] == "N"
+
+
+def test_build_mol_lmdb_index_respects_overwrite_false(tmp_path):
+    source_path = tmp_path / "source_mols.lmdb"
+    write_test_lmdb(
+        source_path,
+        [
+            {
+                "atoms": ["C"],
+                "coordinates": [np.zeros((1, 3), dtype=np.float32)],
+                "smi": "C",
+            }
+        ],
+    )
+    index_path = tmp_path / "mols_index.lmdb"
+    build_mol_lmdb_index(
+        index_path,
+        source_lmdb_path=source_path,
+        show_progress=False,
+    )
+
+    with pytest.raises(FileExistsError):
+        build_mol_lmdb_index(
+            index_path,
+            source_lmdb_path=source_path,
+            overwrite=False,
+            show_progress=False,
+        )
 
 
 def test_create_mol_lmdb_missing_local_data_without_download_raises(tmp_path):

@@ -10,6 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ from biosensia_retrieval import (
 
 DEFAULT_CANDIDATE_POCKETS_LMDB = Path("data/candidate_pockets.lmdb")
 DEFAULT_DRUGCLIP_MOLS_LMDB = Path("external/DrugCLIP/mols.lmdb")
+DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB = Path("data/mols_index.lmdb")
 DEFAULT_MOL_DOWNLOAD_DIR = Path("data/molecules")
 PUBCHEM_SDF_URL = (
     "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/"
@@ -43,6 +45,9 @@ PUBCHEM_USER_AGENT = "BioSensIA-DC/0.1 (molecule LMDB preparation)"
 
 _PDB_ID_RE = re.compile(r"^[0-9][0-9A-Za-z]{3}$")
 _MOL_SLUG_RE = re.compile(r"[^0-9A-Za-z_.-]+")
+_MOL_INDEX_LOOKUP_DB = b"lookup"
+_MOL_INDEX_META_DB = b"meta"
+_MOL_INDEX_SCHEMA_VERSION = "1"
 
 
 def create_mol_lmdb(
@@ -50,6 +55,7 @@ def create_mol_lmdb(
     output_path: str | Path,
     *,
     source_lmdb_path: str | Path = DEFAULT_DRUGCLIP_MOLS_LMDB,
+    mol_index_path: str | Path | None = DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB,
     work_dir: str | Path | None = None,
     download_missing: bool = True,
     overwrite: bool = True,
@@ -77,6 +83,10 @@ def create_mol_lmdb(
     source_lmdb_path:
         Existing DrugCLIP molecule LMDB to search first. Defaults to
         ``external/DrugCLIP/mols.lmdb``.
+    mol_index_path:
+        Optional LMDB index built by ``build_mol_lmdb_index``. If this exists
+        and matches ``source_lmdb_path``, it is used before a sequential scan.
+        Set to ``None`` to force sequential search.
     work_dir:
         Directory used for downloaded molecule SDF files. Defaults to
         ``data/molecules``.
@@ -112,13 +122,31 @@ def create_mol_lmdb(
         raise ValueError("molecules must contain at least one molecule identifier")
 
     source_lmdb_path = Path(source_lmdb_path)
+    mol_index_path = Path(mol_index_path) if mol_index_path is not None else None
     work_dir = Path(work_dir) if work_dir is not None else DEFAULT_MOL_DOWNLOAD_DIR
 
-    local_records = _find_molecule_records_in_lmdb(
-        molecule_queries,
-        source_lmdb_path,
-        show_progress=show_progress,
-    )
+    local_records: dict[int, tuple[dict[str, Any], str]] = {}
+    if mol_index_path is not None:
+        local_records = _find_molecule_records_in_index(
+            molecule_queries,
+            source_lmdb_path,
+            mol_index_path,
+            show_progress=show_progress,
+        )
+
+    missing_query_indices = [
+        query_index
+        for query_index in range(len(molecule_queries))
+        if query_index not in local_records
+    ]
+    if missing_query_indices:
+        sequential_records = _find_molecule_records_in_lmdb(
+            [molecule_queries[query_index] for query_index in missing_query_indices],
+            source_lmdb_path,
+            show_progress=show_progress,
+        )
+        for local_query_index, record in sequential_records.items():
+            local_records[missing_query_indices[local_query_index]] = record
 
     records: list[dict[str, Any]] = []
     summaries: list[dict[str, Any]] = []
@@ -165,6 +193,133 @@ def create_mol_lmdb(
         tqdm.write(f"Writing {len(records)} molecule record(s) to {output_path}.")
     _write_lmdb(records, output_path, overwrite=overwrite, map_size=map_size)
     return summaries
+
+
+def build_mol_lmdb_index(
+    index_path: str | Path = DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB,
+    *,
+    source_lmdb_path: str | Path = DEFAULT_DRUGCLIP_MOLS_LMDB,
+    overwrite: bool = True,
+    map_size: int = 1 << 40,
+    commit_interval: int = 10000,
+    show_progress: bool = True,
+) -> dict[str, Any]:
+    """Build an LMDB lookup index for a DrugCLIP molecule LMDB.
+
+    The index maps canonical SMILES and lower-cased molecule IDs to numeric
+    keys in ``source_lmdb_path``. It is stored separately from the source LMDB
+    so the DrugCLIP-compatible numeric-key molecule file remains unchanged.
+    """
+
+    if commit_interval <= 0:
+        raise ValueError("commit_interval must be greater than 0")
+
+    source_lmdb_path = Path(source_lmdb_path)
+    index_path = Path(index_path)
+    if not source_lmdb_path.exists():
+        raise FileNotFoundError(f"Source molecule LMDB not found: {source_lmdb_path}")
+    if index_path.exists() and not overwrite:
+        raise FileExistsError(f"Molecule index LMDB already exists: {index_path}")
+
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_index_path = index_path.with_name(f".{index_path.name}.tmp")
+    if tmp_index_path.exists():
+        tmp_index_path.unlink()
+
+    source_env = lmdb.open(
+        str(source_lmdb_path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    index_env = lmdb.open(
+        str(tmp_index_path),
+        subdir=False,
+        readonly=False,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        map_size=map_size,
+        max_dbs=2,
+    )
+    lookup_db = index_env.open_db(_MOL_INDEX_LOOKUP_DB, dupsort=True)
+    meta_db = index_env.open_db(_MOL_INDEX_META_DB)
+
+    indexed_records = 0
+    lookup_values = 0
+    completed_write = False
+    transaction = index_env.begin(write=True)
+    progress = None
+    pending_progress = 0
+    try:
+        with source_env.begin() as source_transaction:
+            source_entries = source_env.stat()["entries"]
+            if show_progress:
+                progress = tqdm(
+                    total=source_entries,
+                    desc=f"Indexing {source_lmdb_path.name}",
+                    unit="record",
+                )
+
+            for source_key, value in source_transaction.cursor():
+                record = pickle.loads(value)
+                for lookup_key in _molecule_record_index_keys(record):
+                    transaction.put(lookup_key, source_key, db=lookup_db)
+                    lookup_values += 1
+                indexed_records += 1
+
+                if progress is not None:
+                    pending_progress += 1
+                    if pending_progress >= 1000:
+                        progress.update(pending_progress)
+                        pending_progress = 0
+
+                if indexed_records % commit_interval == 0:
+                    transaction.commit()
+                    transaction = index_env.begin(write=True)
+
+            _write_molecule_index_metadata(
+                transaction,
+                meta_db,
+                source_lmdb_path=source_lmdb_path,
+                source_entries=source_entries,
+                indexed_records=indexed_records,
+                lookup_values=lookup_values,
+            )
+            transaction.commit()
+            transaction = None
+            completed_write = True
+    except Exception:
+        if transaction is not None:
+            transaction.abort()
+        raise
+    finally:
+        if progress is not None:
+            if pending_progress:
+                progress.update(pending_progress)
+            progress.close()
+        source_env.close()
+        index_env.close()
+        if not completed_write:
+            tmp_index_path.unlink(missing_ok=True)
+
+    os.replace(tmp_index_path, index_path)
+    summary = {
+        "index_path": str(index_path),
+        "source_lmdb_path": str(source_lmdb_path),
+        "source_entries": source_entries,
+        "indexed_records": indexed_records,
+        "lookup_values": lookup_values,
+    }
+    if show_progress:
+        tqdm.write(
+            f"Built molecule index {index_path} with {lookup_values} lookup "
+            f"value(s) for {indexed_records} record(s)."
+        )
+    return summary
 
 
 def build_candidate_pockets_lmdb(
@@ -501,6 +656,109 @@ def _normalize_molecule_query(molecule: str) -> dict[str, Any]:
     }
 
 
+def _find_molecule_records_in_index(
+    molecule_queries: list[dict[str, Any]],
+    source_lmdb_path: Path,
+    index_path: Path,
+    *,
+    show_progress: bool,
+) -> dict[int, tuple[dict[str, Any], str]]:
+    if not index_path.exists():
+        if show_progress:
+            tqdm.write(f"Molecule index not found: {index_path}")
+        return {}
+    if not source_lmdb_path.exists():
+        if show_progress:
+            tqdm.write(f"Source molecule LMDB not found: {source_lmdb_path}")
+        return {}
+
+    source_env = lmdb.open(
+        str(source_lmdb_path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        try:
+            index_env = lmdb.open(
+                str(index_path),
+                subdir=False,
+                readonly=True,
+                lock=False,
+                readahead=False,
+                meminit=False,
+                max_readers=256,
+                max_dbs=2,
+            )
+        except lmdb.Error as exc:
+            if show_progress:
+                tqdm.write(f"Could not open molecule index {index_path}: {exc}")
+            return {}
+
+        try:
+            try:
+                lookup_db = index_env.open_db(_MOL_INDEX_LOOKUP_DB)
+                meta_db = index_env.open_db(_MOL_INDEX_META_DB)
+            except lmdb.Error as exc:
+                if show_progress:
+                    tqdm.write(f"Molecule index {index_path} is not usable: {exc}")
+                return {}
+
+            with index_env.begin(db=meta_db) as meta_transaction:
+                if not _molecule_index_matches_source(
+                    meta_transaction,
+                    source_lmdb_path=source_lmdb_path,
+                    source_entries=source_env.stat()["entries"],
+                ):
+                    if show_progress:
+                        tqdm.write(
+                            f"Molecule index {index_path} does not match "
+                            f"{source_lmdb_path}; falling back to sequential search."
+                        )
+                    return {}
+
+            found: dict[int, tuple[dict[str, Any], str]] = {}
+            with (
+                index_env.begin(db=lookup_db) as index_transaction,
+                source_env.begin() as source_transaction,
+            ):
+                cursor = index_transaction.cursor()
+                for query_index, query in enumerate(molecule_queries):
+                    source_keys: list[bytes] = []
+                    for lookup_key in _molecule_query_index_keys(query):
+                        if not cursor.set_key(lookup_key):
+                            continue
+                        source_keys.extend(cursor.iternext_dup())
+                    for source_key in source_keys:
+                        value = source_transaction.get(source_key)
+                        if value is None:
+                            continue
+                        record = pickle.loads(value)
+                        found[query_index] = (
+                            _normalize_molecule_record(
+                                record,
+                                fallback_smiles=query["query"],
+                            ),
+                            (
+                                f"{source_lmdb_path}:"
+                                f"{source_key.decode('ascii', errors='replace')}"
+                            ),
+                        )
+                        break
+            if show_progress and found:
+                tqdm.write(
+                    f"Found {len(found)} molecule record(s) via {index_path}."
+                )
+            return found
+        finally:
+            index_env.close()
+    finally:
+        source_env.close()
+
+
 def _find_molecule_records_in_lmdb(
     molecule_queries: list[dict[str, Any]],
     source_lmdb_path: Path,
@@ -573,6 +831,81 @@ def _find_molecule_records_in_lmdb(
         env.close()
 
     return found
+
+
+def _write_molecule_index_metadata(
+    transaction: lmdb.Transaction,
+    meta_db: lmdb._Database,
+    *,
+    source_lmdb_path: Path,
+    source_entries: int,
+    indexed_records: int,
+    lookup_values: int,
+) -> None:
+    metadata = {
+        "schema_version": _MOL_INDEX_SCHEMA_VERSION,
+        "source_lmdb_path": str(source_lmdb_path.resolve()),
+        "source_entries": int(source_entries),
+        "indexed_records": int(indexed_records),
+        "lookup_values": int(lookup_values),
+    }
+    for key, value in metadata.items():
+        transaction.put(
+            key.encode("ascii"),
+            pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL),
+            db=meta_db,
+        )
+
+
+def _molecule_index_matches_source(
+    transaction: lmdb.Transaction,
+    *,
+    source_lmdb_path: Path,
+    source_entries: int,
+) -> bool:
+    metadata = _read_molecule_index_metadata(transaction)
+    return (
+        metadata.get("schema_version") == _MOL_INDEX_SCHEMA_VERSION
+        and metadata.get("source_lmdb_path") == str(source_lmdb_path.resolve())
+        and metadata.get("source_entries") == int(source_entries)
+    )
+
+
+def _read_molecule_index_metadata(transaction: lmdb.Transaction) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    for key, value in transaction.cursor():
+        metadata[key.decode("ascii")] = pickle.loads(value)
+    return metadata
+
+
+def _molecule_record_index_keys(record: dict[str, Any]) -> set[bytes]:
+    keys: set[bytes] = set()
+    smi = record.get("smi")
+    if smi:
+        smi = str(smi).strip()
+        if smi:
+            keys.add(_molecule_index_lookup_key("smi", smi))
+            canonical_smiles = _canonical_smiles(smi)
+            if canonical_smiles is not None:
+                keys.add(_molecule_index_lookup_key("smi", canonical_smiles))
+
+    for key in ("IDs", "id", "name"):
+        for identifier in _iter_string_values(record.get(key)):
+            keys.add(_molecule_index_lookup_key("id", identifier.lower()))
+    return keys
+
+
+def _molecule_query_index_keys(query: dict[str, Any]) -> set[bytes]:
+    keys: set[bytes] = set()
+    for variant in query["variants"]:
+        keys.add(_molecule_index_lookup_key("smi", variant))
+        keys.add(_molecule_index_lookup_key("id", variant.lower()))
+    return keys
+
+
+def _molecule_index_lookup_key(kind: str, value: str) -> bytes:
+    digest = sha256(str(value).encode("utf-8")).hexdigest()
+    return f"{kind}:{digest}".encode("ascii")
 
 
 def _matched_molecule_query_indices(
@@ -848,7 +1181,9 @@ def _safe_molecule_slug(molecule: str) -> str:
 
 __all__ = [
     "DEFAULT_CANDIDATE_POCKETS_LMDB",
+    "DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB",
     "DEFAULT_DRUGCLIP_MOLS_LMDB",
+    "build_mol_lmdb_index",
     "build_candidate_pockets_frame",
     "build_candidate_pockets_lmdb",
     "create_mol_lmdb",
