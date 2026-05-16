@@ -940,6 +940,147 @@ class DrugCLIP(UnicoreTask):
             pickle.dump([mol_reps, mol_names], f)
 
         return mol_reps, mol_names
+
+    def encode_query_mols(self, model, data_path, atoms, coords, **kwargs):
+        """Encode the molecule side of a target-fishing query.
+
+        Virtual screening and target fishing use the same learned DrugCLIP
+        molecule encoder. The difference is only in which side is large enough
+        to cache:
+
+        * in virtual screening, the large side is the candidate molecule LMDB,
+          so ``encode_mols_once`` saves molecule embeddings to disk;
+        * in target fishing, the molecule LMDB is the query side and usually
+          contains one or a few molecules, so this method computes those
+          embeddings for the current run without writing another cache file.
+
+        The returned ``mol_reps`` array has shape
+        ``(num_query_molecules, embedding_dim)``. The rows are L2-normalized,
+        exactly as in ``encode_mols_once``, so a matrix product with normalized
+        pocket embeddings is a cosine-similarity score.
+        """
+
+        mol_dataset = self.load_retrieval_mols_dataset(data_path, atoms, coords)
+        mol_reps = []
+        mol_names = []
+        bsz = self.args.batch_size
+        mol_data = torch.utils.data.DataLoader(
+            mol_dataset,
+            batch_size=bsz,
+            collate_fn=mol_dataset.collater,
+        )
+
+        for _, sample in enumerate(tqdm(mol_data)):
+            # Keep the query molecule path byte-for-byte consistent with the
+            # existing retrieval encoder: same token tensor, distance matrix,
+            # edge-type matrix, CLS pooling, projection head, and normalization.
+            sample = unicore.utils.move_to_cuda(sample)
+            dist = sample["net_input"]["mol_src_distance"]
+            et = sample["net_input"]["mol_src_edge_type"]
+            st = sample["net_input"]["mol_src_tokens"]
+            mol_padding_mask = st.eq(model.mol_model.padding_idx)
+            mol_x = model.mol_model.embed_tokens(st)
+            n_node = dist.size(-1)
+            gbf_feature = model.mol_model.gbf(dist, et)
+            gbf_result = model.mol_model.gbf_proj(gbf_feature)
+            graph_attn_bias = gbf_result
+            graph_attn_bias = graph_attn_bias.permute(0, 3, 1, 2).contiguous()
+            graph_attn_bias = graph_attn_bias.view(-1, n_node, n_node)
+            mol_outputs = model.mol_model.encoder(
+                mol_x,
+                padding_mask=mol_padding_mask,
+                attn_mask=graph_attn_bias,
+            )
+
+            # DrugCLIP uses the first token as the graph-level representation.
+            # The projection head maps it to the shared 128-dimensional
+            # molecule/pocket contrastive space.
+            mol_encoder_rep = mol_outputs[0][:, 0, :]
+            mol_emb = model.mol_project(mol_encoder_rep)
+            mol_emb = mol_emb / mol_emb.norm(dim=-1, keepdim=True)
+            mol_emb = mol_emb.detach().cpu().numpy()
+            mol_reps.append(mol_emb)
+            mol_names.extend(sample["smi_name"])
+
+        mol_reps = np.concatenate(mol_reps, axis=0)
+        return mol_reps, mol_names
+
+    def encode_pockets_once(self, model, data_path, emb_dir, **kwargs):
+        """Encode and cache the candidate-pocket side of target fishing.
+
+        This mirrors ``encode_mols_once`` for the pocket encoder. In target
+        fishing the expensive, reusable side is the pocket library: for a new
+        query molecule we want to avoid re-encoding every candidate pocket in
+        ``data_path``. The cache stores two objects:
+
+        * ``pocket_reps``: an array with shape
+          ``(num_candidate_pockets, embedding_dim)``;
+        * ``pocket_names``: the PDB/pocket identifier corresponding to each row.
+
+        The cache filename is prefixed with ``pockets_`` so it cannot collide
+        with the molecule cache used by virtual screening when both workflows
+        share the same ``emb_dir``.
+        """
+
+        os.makedirs(emb_dir, exist_ok=True)
+        cache_path = os.path.join(
+            emb_dir,
+            "pockets_" + os.path.basename(str(data_path)) + ".pkl",
+        )
+
+        if os.path.exists(cache_path):
+            with open(cache_path, "rb") as f:
+                pocket_reps, pocket_names = pickle.load(f)
+            return pocket_reps, pocket_names
+
+        pocket_dataset = self.load_pockets_dataset(data_path)
+        pocket_reps = []
+        pocket_names = []
+        pocket_data = torch.utils.data.DataLoader(
+            pocket_dataset,
+            batch_size=self.args.batch_size,
+            collate_fn=pocket_dataset.collater,
+        )
+
+        for _, sample in enumerate(tqdm(pocket_data)):
+            # This is the pocket-side counterpart of the molecule encoding
+            # loop above. The exact sequence of operations is intentionally the
+            # same as ``retrieve_mols`` so target fishing scores live in the
+            # same contrastive embedding space as virtual-screening scores.
+            sample = unicore.utils.move_to_cuda(sample)
+            dist = sample["net_input"]["pocket_src_distance"]
+            et = sample["net_input"]["pocket_src_edge_type"]
+            st = sample["net_input"]["pocket_src_tokens"]
+            pocket_padding_mask = st.eq(model.pocket_model.padding_idx)
+            pocket_x = model.pocket_model.embed_tokens(st)
+            n_node = dist.size(-1)
+            gbf_feature = model.pocket_model.gbf(dist, et)
+            gbf_result = model.pocket_model.gbf_proj(gbf_feature)
+            graph_attn_bias = gbf_result
+            graph_attn_bias = graph_attn_bias.permute(0, 3, 1, 2).contiguous()
+            graph_attn_bias = graph_attn_bias.view(-1, n_node, n_node)
+            pocket_outputs = model.pocket_model.encoder(
+                pocket_x,
+                padding_mask=pocket_padding_mask,
+                attn_mask=graph_attn_bias,
+            )
+
+            # Pool from the CLS token, project into the shared DrugCLIP
+            # contrastive space, and normalize so dot products are cosine
+            # similarities against normalized molecule embeddings.
+            pocket_encoder_rep = pocket_outputs[0][:, 0, :]
+            pocket_emb = model.pocket_project(pocket_encoder_rep)
+            pocket_emb = pocket_emb / pocket_emb.norm(dim=-1, keepdim=True)
+            pocket_emb = pocket_emb.detach().cpu().numpy()
+            pocket_reps.append(pocket_emb)
+            pocket_names.extend(sample["pocket_name"])
+
+        pocket_reps = np.concatenate(pocket_reps, axis=0)
+
+        with open(cache_path, "wb") as f:
+            pickle.dump([pocket_reps, pocket_names], f)
+
+        return pocket_reps, pocket_names
     
     def retrieve_mols(self, model, mol_path, pocket_path, emb_dir, k, **kwargs):
  
@@ -986,6 +1127,62 @@ class DrugCLIP(UnicoreTask):
         # return names and scores
         
         return [mol_names[i] for i in top_k], res[top_k]
+
+    def retrieve_pockets(self, model, mol_path, pocket_path, emb_dir, k, **kwargs):
+        """Rank candidate pockets for the molecule(s) in ``mol_path``.
+
+        This is the target-fishing inverse of ``retrieve_mols``:
+
+        * ``mol_path`` is the query LMDB. It contains the ligand or ligands for
+          which we are fishing for compatible targets.
+        * ``pocket_path`` is the candidate LMDB. It contains the target pocket
+          library to rank.
+        * ``emb_dir`` stores cached candidate-pocket embeddings, because those
+          are the expensive reusable objects across target-fishing runs.
+
+        Scoring uses the same convention as virtual screening. If the query
+        LMDB contains multiple molecules, each candidate pocket receives its
+        best score over all query molecules. With one query molecule this is
+        simply the cosine similarity between that molecule and each pocket.
+        """
+
+        if k <= 0:
+            raise ValueError("k must be greater than 0")
+
+        os.makedirs(emb_dir, exist_ok=True)
+
+        # Candidate pockets are the large reusable side in target fishing, so
+        # they are encoded once and cached. Query molecules are small and are
+        # encoded fresh so changing the query LMDB never leaves stale query
+        # embeddings in the target-fishing cache.
+        pocket_reps, pocket_names = self.encode_pockets_once(
+            model,
+            pocket_path,
+            emb_dir,
+        )
+        mol_reps, _mol_names = self.encode_query_mols(
+            model,
+            mol_path,
+            "atoms",
+            "coordinates",
+        )
+
+        # Shapes:
+        #   pocket_reps: (num_candidate_pockets, embedding_dim)
+        #   mol_reps:    (num_query_molecules, embedding_dim)
+        # The transpose produces a score matrix with one row per candidate
+        # pocket and one column per query molecule.
+        res = pocket_reps @ mol_reps.T
+
+        # For multi-molecule queries, target fishing asks whether a pocket is
+        # compatible with any submitted molecule. This mirrors ``retrieve_mols``,
+        # which takes the best score for each molecule over all query pockets.
+        res = res.max(axis=1)
+
+        # Sort descending by score and keep only the requested number of pockets.
+        top_k = np.argsort(res)[::-1][:k]
+
+        return [pocket_names[i] for i in top_k], res[top_k]
 
 
         
