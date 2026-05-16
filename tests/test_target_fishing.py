@@ -318,6 +318,90 @@ def test_build_mol_lmdb_index_supports_fast_smiles_and_id_lookup(
     assert read_lmdb_records(id_output_path)[0]["smi"] == "N"
 
 
+def test_create_mol_lmdb_downloads_after_usable_index_miss_without_full_scan(
+    monkeypatch,
+    tmp_path,
+):
+    source_path = tmp_path / "source_mols.lmdb"
+    write_test_lmdb(
+        source_path,
+        [
+            {
+                "atoms": ["C"],
+                "coordinates": [np.zeros((1, 3), dtype=np.float32)],
+                "smi": "C",
+            }
+        ],
+    )
+    index_path = tmp_path / "mols_index.lmdb"
+    build_mol_lmdb_index(
+        index_path,
+        source_lmdb_path=source_path,
+        show_progress=False,
+    )
+
+    def fail_sequential_scan(*args, **kwargs):
+        raise AssertionError("sequential scan should not be used after index miss")
+
+    monkeypatch.setattr(
+        "biosensia_target_fishing._find_molecule_records_in_lmdb",
+        fail_sequential_scan,
+    )
+
+    calls = {}
+
+    def fake_download_molecule_record(
+        molecule: str,
+        *,
+        work_dir: Path,
+        timeout_seconds: float,
+        random_seed: int,
+        show_progress: bool,
+    ) -> tuple[dict, str]:
+        calls["download"] = (
+            molecule,
+            work_dir,
+            timeout_seconds,
+            random_seed,
+            show_progress,
+        )
+        return (
+            {
+                "atoms": ["O"],
+                "coordinates": [np.zeros((1, 3), dtype=np.float32)],
+                "smi": "O",
+            },
+            str(work_dir / "generated.sdf"),
+        )
+
+    monkeypatch.setattr(
+        "biosensia_target_fishing._download_molecule_record",
+        fake_download_molecule_record,
+    )
+
+    output_path = tmp_path / "query_mols.lmdb"
+    summaries = create_mol_lmdb(
+        ["O"],
+        output_path,
+        source_lmdb_path=source_path,
+        mol_index_path=index_path,
+        work_dir=tmp_path / "downloads",
+        timeout_seconds=10,
+        random_seed=42,
+        show_progress=False,
+    )
+
+    assert calls["download"] == (
+        "O",
+        tmp_path / "downloads/O",
+        10,
+        42,
+        False,
+    )
+    assert summaries[0]["source"] == str(tmp_path / "downloads/O/generated.sdf")
+    assert read_lmdb_records(output_path)[0]["smi"] == "O"
+
+
 def test_build_mol_lmdb_index_respects_overwrite_false(tmp_path):
     source_path = tmp_path / "source_mols.lmdb"
     write_test_lmdb(

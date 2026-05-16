@@ -85,8 +85,10 @@ def create_mol_lmdb(
         ``external/DrugCLIP/mols.lmdb``.
     mol_index_path:
         Optional LMDB index built by ``build_mol_lmdb_index``. If this exists
-        and matches ``source_lmdb_path``, it is used before a sequential scan.
-        Set to ``None`` to force sequential search.
+        and matches ``source_lmdb_path``, index misses go directly to the
+        download/generation fallback. If the index is missing or unusable, the
+        source LMDB is searched sequentially. Set to ``None`` to force
+        sequential search.
     work_dir:
         Directory used for downloaded molecule SDF files. Defaults to
         ``data/molecules``.
@@ -126,8 +128,9 @@ def create_mol_lmdb(
     work_dir = Path(work_dir) if work_dir is not None else DEFAULT_MOL_DOWNLOAD_DIR
 
     local_records: dict[int, tuple[dict[str, Any], str]] = {}
+    should_scan_source_lmdb = True
     if mol_index_path is not None:
-        local_records = _find_molecule_records_in_index(
+        local_records, should_scan_source_lmdb = _find_molecule_records_in_index(
             molecule_queries,
             source_lmdb_path,
             mol_index_path,
@@ -139,7 +142,7 @@ def create_mol_lmdb(
         for query_index in range(len(molecule_queries))
         if query_index not in local_records
     ]
-    if missing_query_indices:
+    if missing_query_indices and should_scan_source_lmdb:
         sequential_records = _find_molecule_records_in_lmdb(
             [molecule_queries[query_index] for query_index in missing_query_indices],
             source_lmdb_path,
@@ -662,30 +665,36 @@ def _find_molecule_records_in_index(
     index_path: Path,
     *,
     show_progress: bool,
-) -> dict[int, tuple[dict[str, Any], str]]:
+) -> tuple[dict[int, tuple[dict[str, Any], str]], bool]:
     if not index_path.exists():
         if show_progress:
             tqdm.write(f"Molecule index not found: {index_path}")
-        return {}
+        return {}, True
     if not source_lmdb_path.exists():
         if show_progress:
             tqdm.write(f"Source molecule LMDB not found: {source_lmdb_path}")
-        return {}
+        return {}, False
     if show_progress:
         tqdm.write(
             f"Searching molecule index {index_path} "
             f"for {len(molecule_queries)} molecule query/queries."
         )
 
-    source_env = lmdb.open(
-        str(source_lmdb_path),
-        subdir=False,
-        readonly=True,
-        lock=False,
-        readahead=False,
-        meminit=False,
-        max_readers=256,
-    )
+    try:
+        source_env = lmdb.open(
+            str(source_lmdb_path),
+            subdir=False,
+            readonly=True,
+            lock=False,
+            readahead=False,
+            meminit=False,
+            max_readers=256,
+        )
+    except lmdb.Error as exc:
+        if show_progress:
+            tqdm.write(f"Could not open source molecule LMDB {source_lmdb_path}: {exc}")
+        return {}, False
+
     try:
         try:
             index_env = lmdb.open(
@@ -701,7 +710,7 @@ def _find_molecule_records_in_index(
         except lmdb.Error as exc:
             if show_progress:
                 tqdm.write(f"Could not open molecule index {index_path}: {exc}")
-            return {}
+            return {}, True
 
         try:
             try:
@@ -710,7 +719,7 @@ def _find_molecule_records_in_index(
             except lmdb.Error as exc:
                 if show_progress:
                     tqdm.write(f"Molecule index {index_path} is not usable: {exc}")
-                return {}
+                return {}, True
 
             with index_env.begin(db=meta_db) as meta_transaction:
                 if not _molecule_index_matches_source(
@@ -723,7 +732,7 @@ def _find_molecule_records_in_index(
                             f"Molecule index {index_path} does not match "
                             f"{source_lmdb_path}; falling back to sequential search."
                         )
-                    return {}
+                    return {}, True
 
             found: dict[int, tuple[dict[str, Any], str]] = {}
             with (
@@ -762,7 +771,9 @@ def _find_molecule_records_in_index(
                 tqdm.write(
                     f"Found {len(found)} molecule record(s) via {index_path}."
                 )
-            return found
+            elif show_progress:
+                tqdm.write(f"No molecule records found via {index_path}.")
+            return found, False
         finally:
             index_env.close()
     finally:
