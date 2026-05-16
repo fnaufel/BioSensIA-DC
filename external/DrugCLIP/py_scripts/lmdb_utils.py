@@ -1,7 +1,7 @@
 import os
 import pickle
 import lmdb
-import selfies as sf
+# import selfies as sf
 from tqdm import tqdm, trange
 
 
@@ -27,7 +27,7 @@ def read_lmdb(lmdb_path):
         datapoint_pickled = txn.get(idx)
         data = pickle.loads(datapoint_pickled)
         out_list.append(data)
-        print(len(data["coordinates"]))
+        # print(len(data["coordinates"]))
     env.close()
     return out_list 
 

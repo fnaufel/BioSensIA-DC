@@ -13,12 +13,6 @@ def _():
 
 @app.cell
 def _():
-    from pathlib import Path
-    import sys
-
-    repo_root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(repo_root))
-
     import biosensia_target_fishing as bsia
     import polars as pl
     import altair as alt
@@ -70,6 +64,11 @@ def _(alt, df):
         )
     )
     chart
+    return
+
+
+@app.cell
+def _():
     return
 
 
