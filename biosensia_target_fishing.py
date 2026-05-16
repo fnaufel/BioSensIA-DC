@@ -671,6 +671,11 @@ def _find_molecule_records_in_index(
         if show_progress:
             tqdm.write(f"Source molecule LMDB not found: {source_lmdb_path}")
         return {}
+    if show_progress:
+        tqdm.write(
+            f"Searching molecule index {index_path} "
+            f"for {len(molecule_queries)} molecule query/queries."
+        )
 
     source_env = lmdb.open(
         str(source_lmdb_path),
@@ -727,6 +732,11 @@ def _find_molecule_records_in_index(
             ):
                 cursor = index_transaction.cursor()
                 for query_index, query in enumerate(molecule_queries):
+                    if show_progress:
+                        tqdm.write(
+                            f"Searching molecule index {index_path} "
+                            f"for {query['query']!r}."
+                        )
                     source_keys: list[bytes] = []
                     for lookup_key in _molecule_query_index_keys(query):
                         if not cursor.set_key(lookup_key):
