@@ -171,17 +171,40 @@ def _(mo):
 
     ## Building the query molecule(s) `lmdb` file
 
-    The function `create_mol_lmdb` will receive the specification of the molecule(s), search the index, get the data from the source (`external/DrugCLIP/mols.lmdb`) and save an LMDB file. The molecule(s) of interest can be given as follows:
+    The function `create_mol_lmdb` will receive the specification of the molecule(s), search the index, get the data from the local source (default `external/DrugCLIP/mols.lmdb`) and save an LMDB file. The molecule(s) of interest can be given as follows:
 
     - SMILES strings are supported directly.
     - DrugCLIP IDs are matched against the local source LMDB.
 
+    Molecules missing from the local source are resolved through PubChem when `download_missing` is true; use `cid:2244` or `2244` for a PubChem CID, or a PubChem compound name.
 
-
-
-
-    - Missing molecules are resolved through PubChem when `download_missing` is true; use `cid:2244` or `2244` for a PubChem CID, or a PubChem compound name.
+    Let's build a query for okadaic acid:
     """)
+    return
+
+
+@app.cell
+def _(tf):
+    tf.create_mol_lmdb(
+        r'C=C1[C@@H](O)[C@@H]2O[C@]3(CC[C@H](/C=C/[C@@H](C)[C@@H]4CC(C)=C[C@@]5(O[C@H](C[C@@](C)(O)C(=O)O)CC[C@H]5O)O4)O3)CC[C@H]2O[C@@H]1[C@@H](O)C[C@H](C)[C@H]1O[C@@]2(CCCCO2)CC[C@H]1C',
+        'data/query_mol.lmdb'
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Surprisingly, okadaic acid is not in the local data.
+
+    Let's check the LMDB file:
+    """)
+    return
+
+
+@app.cell
+def _(read_lmdb):
+    read_lmdb('data/query_mol.lmdb')
     return
 
 
