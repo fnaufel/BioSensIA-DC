@@ -158,7 +158,29 @@ def _(read_lmdb):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Building the query molecule(s) `lmdb` file
+    # The query molecule(s)
+
+    ## Indexing the known molecules
+
+    The ligand molecule will be passed as a query to the target fishing function as an LMDB file. To save this LMDB query file, we will search the LMDB file DrugCLIP uses to store data about all known molecules --- `external/DrugCLIP/mols.lmdb`.
+
+    However, this file (like `candidate_pockets.lmdb`, described above) has sequential numerical values as keys, so all searches would have to be sequential, taking too long, as the file contains 2,942,719 records.
+
+    To avoid this, the function `build_mol_lmdb_index` creates another LMDB file to index the molecules by canonical SMILES formula.
+
+
+    ## Building the query molecule(s) `lmdb` file
+
+    The function `create_mol_lmdb` will receive the specification of the molecule(s), search the index, get the data from the source (`external/DrugCLIP/mols.lmdb`) and save an LMDB file. The molecule(s) of interest can be given as follows:
+
+    - SMILES strings are supported directly.
+    - DrugCLIP IDs are matched against the local source LMDB.
+
+
+
+
+
+    - Missing molecules are resolved through PubChem when `download_missing` is true; use `cid:2244` or `2244` for a PubChem CID, or a PubChem compound name.
     """)
     return
 

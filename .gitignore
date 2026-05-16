@@ -22,3 +22,5 @@ external/Uni-Core/examples/bert/save
 .Rproj.user/
 *.Rproj
 /data/candidate_pockets.lmdb
+/data/mols_index.lmdb
+/data/molecules/
