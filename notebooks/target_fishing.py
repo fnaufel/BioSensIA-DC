@@ -16,10 +16,10 @@ def _():
     import importlib
     import polars as pl
     import altair as alt
-    from lmdb_helpers import read_lmdb_records
+    import lmdb_helpers
 
     alt.data_transformers.enable("vegafusion")
-    return alt, importlib, read_lmdb_records
+    return alt, importlib, lmdb_helpers
 
 
 @app.cell
@@ -108,20 +108,8 @@ def _(mo):
 
 
 @app.cell
-def _(read_lmdb_records):
-    def read_lmdb(lmdb_path, head_n=None):
-        records = read_lmdb_records(lmdb_path)
-        if head_n is not None:
-            return records[:head_n]
-        return records
-
-
-    return (read_lmdb,)
-
-
-@app.cell
-def _(read_lmdb):
-    read_lmdb('data/candidate_pockets.lmdb', 5)
+def _(lmdb_helpers):
+    lmdb_helpers.read_lmdb_records('data/candidate_pockets.lmdb', head_n=5)
     return
 
 
@@ -173,8 +161,8 @@ def _(mo):
 
 
 @app.cell
-def _(read_lmdb):
-    read_lmdb('data/query_mol.lmdb')
+def _(lmdb_helpers):
+    lmdb_helpers.read_lmdb_records('data/query_mol.lmdb')
     return
 
 

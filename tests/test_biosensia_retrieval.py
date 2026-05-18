@@ -37,6 +37,11 @@ def test_read_lmdb_records_accepts_molecule_style_lmdb(tmp_path):
     records = read_lmdb_records(output_path)
 
     assert [record["smi"] for record in records] == ["C", "CC", "CCC"]
+    assert [record["smi"] for record in read_lmdb_records(output_path, head_n=2)] == [
+        "C",
+        "CC",
+    ]
+    assert read_lmdb_records(output_path, head_n=0) == []
 
 
 def test_create_pocket_lmdb_accepts_single_pdb_id_string(tmp_path):

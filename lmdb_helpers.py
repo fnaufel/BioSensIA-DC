@@ -9,12 +9,23 @@ from typing import Any, Iterable
 import lmdb
 
 
-def read_lmdb_records(path: str | Path) -> list[dict[str, Any]]:
+def read_lmdb_records(
+    path: str | Path,
+    head_n: int | None = None,
+) -> list[dict[str, Any]]:
     """Read pickled DrugCLIP LMDB records.
 
     The same helper works for DrugCLIP pocket and molecule LMDB files because
     both store pickled dictionaries under numeric keys.
+    When ``head_n`` is set, dense numeric-key LMDBs are read by direct key
+    lookup so only the requested prefix is deserialized.
     """
+
+    if head_n is not None:
+        if head_n < 0:
+            raise ValueError("head_n must be greater than or equal to 0")
+        if head_n == 0:
+            return []
 
     env = lmdb.open(
         str(path),
@@ -27,6 +38,13 @@ def read_lmdb_records(path: str | Path) -> list[dict[str, Any]]:
     )
     try:
         with env.begin() as transaction:
+            if head_n is not None:
+                return _read_lmdb_record_head(
+                    transaction,
+                    head_n,
+                    entry_count=env.stat()["entries"],
+                )
+
             keys = list(transaction.cursor().iternext(values=False))
             if _has_numeric_lmdb_keys(keys):
                 keys = sorted(keys, key=lambda key: int(key.decode("ascii")))
@@ -79,6 +97,54 @@ def _has_numeric_lmdb_keys(keys: list[bytes]) -> bool:
         return all(key.decode("ascii").isdigit() for key in keys)
     except UnicodeDecodeError:
         return False
+
+
+def _read_lmdb_record_head(
+    transaction: lmdb.Transaction,
+    head_n: int,
+    *,
+    entry_count: int,
+) -> list[dict[str, Any]]:
+    records = _read_dense_numeric_lmdb_record_head(
+        transaction,
+        head_n,
+        entry_count=entry_count,
+    )
+    if records is not None:
+        return records
+
+    keys = list(transaction.cursor().iternext(values=False))
+    if _has_numeric_lmdb_keys(keys):
+        keys = sorted(keys, key=lambda key: int(key.decode("ascii")))
+
+    records = []
+    for key in keys:
+        value = transaction.get(key)
+        if value is not None:
+            records.append(loads_lmdb_record(value))
+        if len(records) >= head_n:
+            break
+    return records
+
+
+def _read_dense_numeric_lmdb_record_head(
+    transaction: lmdb.Transaction,
+    head_n: int,
+    *,
+    entry_count: int,
+) -> list[dict[str, Any]] | None:
+    if entry_count == 0:
+        return []
+
+    records = []
+    for index in range(entry_count):
+        if len(records) >= head_n:
+            break
+        value = transaction.get(str(index).encode("ascii"))
+        if value is None:
+            return None
+        records.append(loads_lmdb_record(value))
+    return records
 
 
 def loads_lmdb_record(value: bytes) -> dict[str, Any]:
