@@ -1033,52 +1033,76 @@ class DrugCLIP(UnicoreTask):
                 pocket_reps, pocket_names = pickle.load(f)
             return pocket_reps, pocket_names
 
+        pocket_dataset = self.load_pockets_dataset(data_path)
+        num_pockets = len(pocket_dataset)
+        pockets_per_batch = self.args.batch_size
         logger.info(
-            "embedding all candidate pockets from %s; saving embeddings to %s",
+            "embedding %d candidate pockets from %s in batches of %d pockets; "
+            "saving embeddings to %s",
+            num_pockets,
             data_path,
+            pockets_per_batch,
             cache_path,
         )
-        pocket_dataset = self.load_pockets_dataset(data_path)
         pocket_reps = []
         pocket_names = []
         pocket_data = torch.utils.data.DataLoader(
             pocket_dataset,
-            batch_size=self.args.batch_size,
+            batch_size=pockets_per_batch,
             collate_fn=pocket_dataset.collater,
         )
 
-        for _, sample in enumerate(tqdm(pocket_data)):
-            # This is the pocket-side counterpart of the molecule encoding
-            # loop above. The exact sequence of operations is intentionally the
-            # same as ``retrieve_mols`` so target fishing scores live in the
-            # same contrastive embedding space as virtual-screening scores.
-            sample = unicore.utils.move_to_cuda(sample)
-            dist = sample["net_input"]["pocket_src_distance"]
-            et = sample["net_input"]["pocket_src_edge_type"]
-            st = sample["net_input"]["pocket_src_tokens"]
-            pocket_padding_mask = st.eq(model.pocket_model.padding_idx)
-            pocket_x = model.pocket_model.embed_tokens(st)
-            n_node = dist.size(-1)
-            gbf_feature = model.pocket_model.gbf(dist, et)
-            gbf_result = model.pocket_model.gbf_proj(gbf_feature)
-            graph_attn_bias = gbf_result
-            graph_attn_bias = graph_attn_bias.permute(0, 3, 1, 2).contiguous()
-            graph_attn_bias = graph_attn_bias.view(-1, n_node, n_node)
-            pocket_outputs = model.pocket_model.encoder(
-                pocket_x,
-                padding_mask=pocket_padding_mask,
-                attn_mask=graph_attn_bias,
-            )
+        progress = tqdm(
+            total=num_pockets,
+            desc="Embedding candidate pockets",
+            unit="pocket",
+        )
+        try:
+            for batch_index, sample in enumerate(pocket_data, start=1):
+                # This is the pocket-side counterpart of the molecule encoding
+                # loop above. The exact sequence of operations is intentionally
+                # the same as ``retrieve_mols`` so target fishing scores live in
+                # the same contrastive embedding space as virtual-screening
+                # scores.
+                sample = unicore.utils.move_to_cuda(sample)
+                dist = sample["net_input"]["pocket_src_distance"]
+                et = sample["net_input"]["pocket_src_edge_type"]
+                st = sample["net_input"]["pocket_src_tokens"]
+                pocket_padding_mask = st.eq(model.pocket_model.padding_idx)
+                pocket_x = model.pocket_model.embed_tokens(st)
+                n_node = dist.size(-1)
+                gbf_feature = model.pocket_model.gbf(dist, et)
+                gbf_result = model.pocket_model.gbf_proj(gbf_feature)
+                graph_attn_bias = gbf_result
+                graph_attn_bias = graph_attn_bias.permute(0, 3, 1, 2).contiguous()
+                graph_attn_bias = graph_attn_bias.view(-1, n_node, n_node)
+                pocket_outputs = model.pocket_model.encoder(
+                    pocket_x,
+                    padding_mask=pocket_padding_mask,
+                    attn_mask=graph_attn_bias,
+                )
 
-            # Pool from the CLS token, project into the shared DrugCLIP
-            # contrastive space, and normalize so dot products are cosine
-            # similarities against normalized molecule embeddings.
-            pocket_encoder_rep = pocket_outputs[0][:, 0, :]
-            pocket_emb = model.pocket_project(pocket_encoder_rep)
-            pocket_emb = pocket_emb / pocket_emb.norm(dim=-1, keepdim=True)
-            pocket_emb = pocket_emb.detach().cpu().numpy()
-            pocket_reps.append(pocket_emb)
-            pocket_names.extend(sample["pocket_name"])
+                # Pool from the CLS token, project into the shared DrugCLIP
+                # contrastive space, and normalize so dot products are cosine
+                # similarities against normalized molecule embeddings.
+                pocket_encoder_rep = pocket_outputs[0][:, 0, :]
+                pocket_emb = model.pocket_project(pocket_encoder_rep)
+                pocket_emb = pocket_emb / pocket_emb.norm(dim=-1, keepdim=True)
+                pocket_emb = pocket_emb.detach().cpu().numpy()
+                pocket_reps.append(pocket_emb)
+                pocket_names.extend(sample["pocket_name"])
+
+                # ``pocket_data`` yields batches, while users care about
+                # pockets. Convert the completed batch count to processed
+                # pockets by multiplying by the configured pockets per batch.
+                # The final batch may be partial, so cap at ``num_pockets``.
+                processed_pockets = min(
+                    batch_index * pockets_per_batch,
+                    num_pockets,
+                )
+                progress.update(processed_pockets - progress.n)
+        finally:
+            progress.close()
 
         pocket_reps = np.concatenate(pocket_reps, axis=0)
 
