@@ -23,6 +23,7 @@ from typing import Any, Iterable
 import lmdb
 import numpy as np
 import torch
+from lmdb_helpers import loads_lmdb_record
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
 from tqdm.auto import tqdm
@@ -265,7 +266,7 @@ def collect_lmdb_metadata_by_smiles(
     try:
         with env.begin() as transaction:
             for _, value in transaction.cursor():
-                record = _loads_lmdb_record(value)
+                record = loads_lmdb_record(value)
                 smi = record.get("smi")
                 if smi not in wanted:
                     continue
@@ -542,12 +543,6 @@ def _append_jsonl(path: str | Path, row: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, sort_keys=True) + "\n")
-
-
-def _loads_lmdb_record(value: bytes) -> dict[str, Any]:
-    import pickle
-
-    return pickle.loads(value)
 
 
 def _require_polars():

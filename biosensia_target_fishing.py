@@ -29,8 +29,8 @@ from biosensia_retrieval import (
     _record_from_data_pkl,
     _record_from_pocket_pdb,
     _record_from_protein_and_ligand,
-    _write_lmdb,
 )
+from lmdb_helpers import write_lmdb_records
 
 
 DEFAULT_CANDIDATE_POCKETS_LMDB = Path("data/candidate_pockets.lmdb")
@@ -194,7 +194,7 @@ def create_mol_lmdb(
 
     if show_progress:
         tqdm.write(f"Writing {len(records)} molecule record(s) to {output_path}.")
-    _write_lmdb(records, output_path, overwrite=overwrite, map_size=map_size)
+    write_lmdb_records(records, output_path, overwrite=overwrite, map_size=map_size)
     return summaries
 
 

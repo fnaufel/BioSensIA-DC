@@ -14,13 +14,12 @@ def _():
 @app.cell
 def _():
     import importlib
-    import lmdb
-    import pickle
     import polars as pl
     import altair as alt
+    from lmdb_helpers import read_lmdb_records
 
     alt.data_transformers.enable("vegafusion")
-    return alt, importlib, lmdb, pickle
+    return alt, importlib, read_lmdb_records
 
 
 @app.cell
@@ -109,41 +108,12 @@ def _(mo):
 
 
 @app.cell
-def _(lmdb, pickle):
+def _(read_lmdb_records):
     def read_lmdb(lmdb_path, head_n=None):
-
-        env = lmdb.open(
-            lmdb_path,
-            subdir=False,
-            readonly=True,
-            lock=False,
-            readahead=False,
-            meminit=False,
-            max_readers=256,
-        )  
-
-        txn = env.begin()
-        # LMDB cursor order is lexicographic byte order, not numeric order,
-        # so we sort the keys:
-        keys = sorted(
-            txn.cursor().iternext(values=False), 
-            key=lambda k: int(k.decode('ascii'))
-        )
-    
-        out_dict = {}
-        i = 1
-
-        for idx in keys:
-            datapoint_pickled = txn.get(idx)
-            data = pickle.loads(datapoint_pickled)
-            out_dict[idx] = data
-            i += 1
-            if head_n is not None and i > head_n:
-                break
-            keys = txn.cursor()
-
-        env.close()
-        return out_dict
+        records = read_lmdb_records(lmdb_path)
+        if head_n is not None:
+            return records[:head_n]
+        return records
 
 
     return (read_lmdb,)
@@ -205,6 +175,14 @@ def _(mo):
 @app.cell
 def _(read_lmdb):
     read_lmdb('data/query_mol.lmdb')
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Running the query
+    """)
     return
 
 

@@ -6,7 +6,8 @@ import lmdb
 import numpy as np
 import pytest
 
-from biosensia_retrieval import create_pocket_lmdb, read_lmdb_records
+from biosensia_retrieval import create_pocket_lmdb
+from lmdb_helpers import read_lmdb_records
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

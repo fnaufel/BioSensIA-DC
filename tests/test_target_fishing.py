@@ -2,17 +2,16 @@ import pickle
 import shutil
 from pathlib import Path
 
-import lmdb
 import numpy as np
 import pytest
 
-from biosensia_retrieval import read_lmdb_records
 from biosensia_target_fishing import (
     build_candidate_pockets_frame,
     build_candidate_pockets_lmdb,
     build_mol_lmdb_index,
     create_mol_lmdb,
 )
+from lmdb_helpers import read_lmdb_records, write_lmdb_records
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,21 +21,7 @@ TWO_R_ONE_W_DIR = COMBINE_SET_DIR / "2r1w"
 
 
 def write_test_lmdb(path: Path, records: list[dict]) -> None:
-    env = lmdb.open(
-        str(path),
-        subdir=False,
-        readonly=False,
-        lock=False,
-        readahead=False,
-        meminit=False,
-        map_size=1 << 20,
-    )
-    try:
-        with env.begin(write=True) as transaction:
-            for index, record in enumerate(records):
-                transaction.put(str(index).encode("ascii"), pickle.dumps(record))
-    finally:
-        env.close()
+    write_lmdb_records(records, path, overwrite=True, map_size=1 << 20)
 
 
 def test_build_candidate_pockets_lmdb_writes_encoder_schema(tmp_path):
