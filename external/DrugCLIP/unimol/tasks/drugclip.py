@@ -1033,6 +1033,11 @@ class DrugCLIP(UnicoreTask):
                 pocket_reps, pocket_names = pickle.load(f)
             return pocket_reps, pocket_names
 
+        logger.info(
+            "embedding all candidate pockets from %s; saving embeddings to %s",
+            data_path,
+            cache_path,
+        )
         pocket_dataset = self.load_pockets_dataset(data_path)
         pocket_reps = []
         pocket_names = []
