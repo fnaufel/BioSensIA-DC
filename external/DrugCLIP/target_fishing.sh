@@ -18,9 +18,9 @@
 #####################################################################################
 
 results_path="./test"  # kept for Uni-Core argument parity with retrieval.sh
-batch_size=8
-batch_size_valid=8
-top_k=10000
+batch_size=2
+batch_size_valid=2
+top_k=1000
 weight_path="checkpoint_best.pt"
 DATA_PATH="${DATA_PATH:-./data}" # path containing DrugCLIP dictionaries
 MOL_PATH="${MOL_PATH:-../../data/query_mol.lmdb}" # query molecule LMDB
