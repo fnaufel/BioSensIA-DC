@@ -85,10 +85,10 @@ def create_mol_lmdb(
         ``external/DrugCLIP/mols.lmdb``.
     mol_index_path:
         Optional LMDB index built by ``build_mol_lmdb_index``. If this exists
-        and matches ``source_lmdb_path``, index misses go directly to the
-        download/generation fallback. If the index is missing or unusable, the
-        source LMDB is searched sequentially. Set to ``None`` to force
-        sequential search.
+        with a compatible schema version and the same source entry count, index
+        misses go directly to the download/generation fallback. If the index is
+        missing or unusable, the source LMDB is searched sequentially. Set to
+        ``None`` to force sequential search.
     work_dir:
         Directory used for downloaded molecule SDF files. Defaults to
         ``data/molecules``.
@@ -724,12 +724,11 @@ def _find_molecule_records_in_index(
             with index_env.begin(db=meta_db) as meta_transaction:
                 if not _molecule_index_matches_source(
                     meta_transaction,
-                    source_lmdb_path=source_lmdb_path,
                     source_entries=source_env.stat()["entries"],
                 ):
                     if show_progress:
                         tqdm.write(
-                            f"Molecule index {index_path} does not match "
+                            f"Molecule index {index_path} is not compatible with "
                             f"{source_lmdb_path}; falling back to sequential search."
                         )
                     return {}, True
@@ -881,13 +880,11 @@ def _write_molecule_index_metadata(
 def _molecule_index_matches_source(
     transaction: lmdb.Transaction,
     *,
-    source_lmdb_path: Path,
     source_entries: int,
 ) -> bool:
     metadata = _read_molecule_index_metadata(transaction)
     return (
         metadata.get("schema_version") == _MOL_INDEX_SCHEMA_VERSION
-        and metadata.get("source_lmdb_path") == str(source_lmdb_path.resolve())
         and metadata.get("source_entries") == int(source_entries)
     )
 

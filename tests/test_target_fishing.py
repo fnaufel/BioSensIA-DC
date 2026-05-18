@@ -318,6 +318,51 @@ def test_build_mol_lmdb_index_supports_fast_smiles_and_id_lookup(
     assert read_lmdb_records(id_output_path)[0]["smi"] == "N"
 
 
+def test_create_mol_lmdb_reuses_index_for_different_source_path_same_entry_count(
+    monkeypatch,
+    tmp_path,
+):
+    records = [
+        {
+            "atoms": ["C", "C", "O"],
+            "coordinates": [np.ones((3, 3), dtype=np.float32)],
+            "smi": "CCO",
+            "IDs": "ethanol-record",
+        }
+    ]
+    indexed_source_path = tmp_path / "sagres_mols.lmdb"
+    local_source_path = tmp_path / "local_mols.lmdb"
+    write_test_lmdb(indexed_source_path, records)
+    write_test_lmdb(local_source_path, records)
+    index_path = tmp_path / "mols_index.lmdb"
+    build_mol_lmdb_index(
+        index_path,
+        source_lmdb_path=indexed_source_path,
+        show_progress=False,
+    )
+
+    def fail_sequential_scan(*args, **kwargs):
+        raise AssertionError("sequential scan should not be used")
+
+    monkeypatch.setattr(
+        "biosensia_target_fishing._find_molecule_records_in_lmdb",
+        fail_sequential_scan,
+    )
+
+    output_path = tmp_path / "mols_from_reused_index.lmdb"
+    summaries = create_mol_lmdb(
+        ["OCC"],
+        output_path,
+        source_lmdb_path=local_source_path,
+        mol_index_path=index_path,
+        download_missing=False,
+        show_progress=False,
+    )
+
+    assert summaries[0]["source"] == f"{local_source_path}:0"
+    assert read_lmdb_records(output_path)[0]["smi"] == "CCO"
+
+
 def test_create_mol_lmdb_downloads_after_usable_index_miss_without_full_scan(
     monkeypatch,
     tmp_path,
