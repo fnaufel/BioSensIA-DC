@@ -12,6 +12,58 @@ def _():
 
 
 @app.cell
+def _(mo):
+    import subprocess as sp
+    from pathlib import Path
+
+
+    def fenced_block(text: str, language: str = "bash") -> str:
+        """
+        Return a Markdown fenced code block, choosing a fence long enough
+        not to conflict with the block contents.
+        """
+        fence = "```"
+        while fence in text:
+            fence += "`"
+
+        return f"{fence}{language}\n{text.rstrip()}\n{fence}"
+
+
+    def sh(
+        command: str,
+        cwd: str | Path = ".",
+        language: str = "bash",
+    ) -> mo.Html:
+        result = sp.run(
+            ["bash", "-lc", command],
+            cwd=Path(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        parts = []
+
+        if result.stdout:
+            parts.append("**stdout**")
+            parts.append(fenced_block(result.stdout, language))
+
+        if result.stderr:
+            parts.append("**stderr**")
+            parts.append(fenced_block(result.stderr, language))
+
+        if result.returncode != 0:
+            parts.append(f"**exit status:** `{result.returncode}`")
+
+        if not parts:
+            parts.append("Command produced no output.")
+
+        return mo.md("\n\n".join(parts))
+
+    return Path, sh
+
+
+@app.cell
 def _():
     import importlib
     import polars as pl
@@ -136,7 +188,7 @@ def _(mo):
 
     Molecules missing from the local source are resolved through PubChem when `download_missing` is true; use `cid:2244` or `2244` for a PubChem CID, or a PubChem compound name.
 
-    Let's build a query for okadaic acid:
+    Let's build a query for okadaic acid. We are using the SMILES formula from <https://pubchem.ncbi.nlm.nih.gov/compound/Okadaic-Acid>:
     """)
     return
 
@@ -144,7 +196,7 @@ def _(mo):
 @app.cell
 def _(tf):
     tf.create_mol_lmdb(
-        r'C=C1[C@@H](O)[C@@H]2O[C@]3(CC[C@H](/C=C/[C@@H](C)[C@@H]4CC(C)=C[C@@]5(O[C@H](C[C@@](C)(O)C(=O)O)CC[C@H]5O)O4)O3)CC[C@H]2O[C@@H]1[C@@H](O)C[C@H](C)[C@H]1O[C@@]2(CCCCO2)CC[C@H]1C',
+        r'C[C@@H]1CC[C@]2(CCCCO2)O[C@@H]1[C@@H](C)C[C@@H]([C@@H]3C(=C)[C@H]([C@H]4[C@H](O3)CC[C@]5(O4)CC[C@@H](O5)/C=C/[C@@H](C)[C@@H]6CC(=C[C@@]7(O6)[C@@H](CC[C@H](O7)C[C@](C)(C(=O)O)O)O)C)O)O',
         'data/query_mol.lmdb'
     )
     return
@@ -170,7 +222,69 @@ def _(lmdb_helpers):
 def _(mo):
     mo.md(r"""
     # Running the query
+
+    Change to the correct directory and run the bash script:
+
+    ```bash
+    cd external/DrugCLIP/
+    ./target_fishing.sh
+    ```
+
+    The first time the script is run, embeddings for all candidate pockets will be computed and saved to `external/DrugCLIP/data/pocket_emb/pockets_candidate_pockets.lmdb.pkl`. This will take a few minutes.
+
+    The results will be saved in `external/DrugCLIP/data/pocket_emb/ranked_pockets.txt`.
+
+    Here are the first 50 pockets:
     """)
+    return
+
+
+@app.cell
+def _(sh):
+    sh(
+        'cat -n external/DrugCLIP/data/pocket_emb/ranked_pockets.txt | head -n50',
+        cwd='..',
+        language='text'
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    As a polars dataframe:
+    """)
+    return
+
+
+@app.cell
+def _(tf):
+    df_ranked = tf.build_ranked_pockets_frame('../external/DrugCLIP/data/pocket_emb/ranked_pockets.txt')
+    df_ranked
+    return (df_ranked,)
+
+
+@app.cell
+def _(Path, df_ranked):
+    import pyarrow
+
+    html = df_ranked.to_pandas().to_html(
+        index=False,
+        render_links=True,
+        escape=False,
+    )
+
+    Path("../external/DrugCLIP/data/pocket_emb/ranked_pockets.html").write_text(
+        f"""<!doctype html>
+    <html>
+    <head><meta charset="utf-8"><title>Ranked pockets</title></head>
+    <body>
+    {html}
+    </body>
+    </html>
+    """,
+        encoding="utf-8",
+    )
     return
 
 

@@ -1,4 +1,4 @@
-"""Utilities for preparing DrugCLIP target-fishing inputs."""
+"""Utilities for preparing and reading DrugCLIP target-fishing data."""
 
 from __future__ import annotations
 
@@ -37,6 +37,10 @@ DEFAULT_CANDIDATE_POCKETS_LMDB = Path("data/candidate_pockets.lmdb")
 DEFAULT_DRUGCLIP_MOLS_LMDB = Path("external/DrugCLIP/mols.lmdb")
 DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB = Path("data/mols_index.lmdb")
 DEFAULT_MOL_DOWNLOAD_DIR = Path("data/molecules")
+DEFAULT_RANKED_POCKETS_PATH = Path(
+    "external/DrugCLIP/data/pocket_emb/ranked_pockets.txt"
+)
+RCSB_PDB_STRUCTURE_URL_PREFIX = "https://www.rcsb.org/structure/"
 PUBCHEM_SDF_URL = (
     "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/"
     "{namespace}/{identifier}/SDF?record_type={record_type}"
@@ -517,6 +521,35 @@ def build_candidate_pockets_frame(
             "pocket": pl.String,
             "pocket_atoms": pl.Int64,
         },
+    )
+
+
+def build_ranked_pockets_frame(
+    ranked_pockets_path: str | Path = DEFAULT_RANKED_POCKETS_PATH,
+) -> pl.DataFrame:
+    """Read DrugCLIP target-fishing scores and add predictable RCSB PDB links."""
+
+    ranked_pockets_path = Path(ranked_pockets_path)
+    if not ranked_pockets_path.exists():
+        raise FileNotFoundError(f"ranked pockets file not found: {ranked_pockets_path}")
+
+    df = pl.read_csv(
+        ranked_pockets_path,
+        separator="\t",
+        has_header=False,
+        schema={
+            "pocket": pl.String,
+            "drugclip_score": pl.Float64,
+        },
+    )
+
+    return df.with_columns(
+        pl.concat_str(
+            [
+                pl.lit(RCSB_PDB_STRUCTURE_URL_PREFIX),
+                pl.col("pocket").str.to_uppercase(),
+            ]
+        ).alias("pdb_url")
     )
 
 
@@ -1201,8 +1234,11 @@ __all__ = [
     "DEFAULT_CANDIDATE_POCKETS_LMDB",
     "DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB",
     "DEFAULT_DRUGCLIP_MOLS_LMDB",
+    "DEFAULT_RANKED_POCKETS_PATH",
+    "RCSB_PDB_STRUCTURE_URL_PREFIX",
     "build_mol_lmdb_index",
     "build_candidate_pockets_frame",
     "build_candidate_pockets_lmdb",
+    "build_ranked_pockets_frame",
     "create_mol_lmdb",
 ]

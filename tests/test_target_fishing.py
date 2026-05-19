@@ -9,6 +9,7 @@ from biosensia_target_fishing import (
     build_candidate_pockets_frame,
     build_candidate_pockets_lmdb,
     build_mol_lmdb_index,
+    build_ranked_pockets_frame,
     create_mol_lmdb,
 )
 from lmdb_helpers import read_lmdb_records, write_lmdb_records
@@ -68,6 +69,31 @@ def test_build_candidate_pockets_frame_reads_pocket_atom_counts(tmp_path):
 
     assert df.columns == ["pocket", "pocket_atoms"]
     assert df.to_dicts() == [{"pocket": "2ie4", "pocket_atoms": 546}]
+
+
+def test_build_ranked_pockets_frame_reads_scores_and_adds_pdb_links(tmp_path):
+    ranked_pockets_path = tmp_path / "ranked_pockets.txt"
+    ranked_pockets_path.write_text(
+        "1u32\t0.89501953125\n"
+        "2ie4\t0.8662109375\n",
+        encoding="utf-8",
+    )
+
+    df = build_ranked_pockets_frame(ranked_pockets_path)
+
+    assert df.columns == ["pocket", "drugclip_score", "pdb_url"]
+    assert df.to_dicts() == [
+        {
+            "pocket": "1u32",
+            "drugclip_score": 0.89501953125,
+            "pdb_url": "https://www.rcsb.org/structure/1U32",
+        },
+        {
+            "pocket": "2ie4",
+            "drugclip_score": 0.8662109375,
+            "pdb_url": "https://www.rcsb.org/structure/2IE4",
+        },
+    ]
 
 
 def test_build_candidate_pockets_lmdb_raises_for_invalid_bundle_by_default(tmp_path):
