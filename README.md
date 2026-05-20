@@ -26,10 +26,17 @@
   - [Make the script files
     executable](#make-the-script-files-executable)
 - [How to use BioSensIA-DC](#how-to-use-biosensia-dc)
-  - [To run the original DrugCLIP](#to-run-the-original-drugclip)
+  - [How to run the original
+    DrugCLIP](#how-to-run-the-original-drugclip)
     - [Benchmarks](#benchmarks)
     - [Retrieval (virtual screening)](#retrieval-virtual-screening)
-    - [Training](#training)
+  - [How to do target fishing](#how-to-do-target-fishing)
+    - [Build the LMDB file containing the candidate
+      pockets](#build-the-lmdb-file-containing-the-candidate-pockets)
+    - [Build the LMDB file containing the query
+      molecule(s)](#build-the-lmdb-file-containing-the-query-molecules)
+    - [Run the search](#run-the-search)
+- [Roadmap](#roadmap)
 
 ## Welcome to the repository for the **BioSensIA-DC prototype**
 
@@ -383,7 +390,7 @@ chmod a+x *.sh
 
 ## How to use BioSensIA-DC
 
-### To run the original DrugCLIP
+### How to run the original DrugCLIP
 
 #### Benchmarks
 
@@ -417,15 +424,6 @@ screening**: you can submit a query consisting of one or more pockets,
 and the system will produce a list of molecules ranked according to (the
 maximum of) their compatibility with the pockets.
 
-Retrieval is done by executing the shell script
-[`external/DrugCLIP/retrieval.sh`](external/DrugCLIP/retrieval.sh). Read
-the comments in that file to see how to configure it.
-
-``` bash
-cd ./external/DrugCLIP
-./retrieval.sh
-```
-
 The default list of candidate molecules is contained in
 `external/DrugCLIP/mols.lmdb`.
 
@@ -444,11 +442,30 @@ LMDB file containing the pockets specified in the arguments. See the
 definition of the `create_pocket_lmdb` function in
 [`biosensia_retrieval.py`](biosensia_retrieval.py) for more details.
 
+For example, the following code creates the file `query_pocket.lmdb`
+containing information for the enzyme PP2A in a complex with okadaic
+acid:
+
+``` python
+import biosensia_retrieval.py as retr
+retr.create_pocket_lmdb('2ie4', 'query_pocket.lmdb')
+```
+
+After the definition of the query pocket(s), retrieval is done by
+executing the shell script
+[`external/DrugCLIP/retrieval.sh`](external/DrugCLIP/retrieval.sh). Read
+the comments in that file to see how to configure it.
+
+``` bash
+cd ./external/DrugCLIP
+./retrieval.sh
+```
+
 The first time the retrieval script is run, DrugCLIP must generate
-embeddings for **all** of the candidate molecules. This may take hours.
-The generated embeddings are saved to a file in the directory specified
-by the `EMB_DIR` variable. Subsequent runs with the same set of
-candidate molecules will be much faster, as they will use these saved
+embeddings for **all** of the candidate molecules. This may take a long
+time. The generated embeddings are saved to a file in the directory
+specified by the `EMB_DIR` variable. Subsequent runs with the same set
+of candidate molecules will be much faster, as they will use these saved
 embeddings.
 
 The ranked list of molecules will be saved in a TSV file named
@@ -460,6 +477,125 @@ pocket in the query).
 Because of hard-coded constraints in the original DrugCLIP code, a GPU
 must be available for the script to run.
 
-#### Training
+### How to do target fishing
 
-\<\<\<To be detailed later.\>\>\>
+The code in the original DrugCLIP repository does not support target
+fishing (submitting query **molecules** to retrieve **pockets** ranked
+by their compatibility with the query molecules). We have implemented
+this functionality.
+
+#### Build the LMDB file containing the candidate pockets
+
+Because the code in the original DrugCLIP repository did not handle
+target fishing, there is no LMDB file containing all the known pockets.
+To build such a file, run
+
+``` python
+import biosensia_target_fishing.py as tf
+tf.build_candidate_pockets_lmdb()
+```
+
+The default is to save the file as `data/candidate_pockets.lmdb`.
+
+See the definition of the `build_candidate_pockets_lmdb` function in
+[`biosensia_retrieval.py`](biosensia_retrieval.py) for more details.
+
+#### Build the LMDB file containing the query molecule(s)
+
+The list of query molecules must be contained in a file whose path is
+the value of the `MOL_PATH` variable in the
+[`target_fishing.sh`](external/DrugCLIP/target_fishing.sh) script.
+
+You can get the query molecules from the file
+`external/DrugCLIP/mols.lmdb`, which contains information about
+2,942,719 molecules; however, the records in that file can only be
+searched **sequentially**. To speed things up, you must run the function
+`build_mol_lmdb_index`, in
+[`biosensia_target_fishing.py`](biosensia_target_fishing.py), to build
+an index file. In Python, run
+
+``` python
+import biosensia_target_fishing.py as tf
+tf.build_mol_lmdb_index()
+```
+
+Building the molecule index takes a long time, but it only needs to be
+done once.
+
+After the molecule index has been built, you can invoke the function
+`create_mol_lmdb` to save an LMDB file containing the molecule(s) you
+want to submit as a query. You can specify the molecule(s) in any of the
+following ways (you may pass a single string or a list of strings):
+
+- SMILES strings are supported directly. Use raw strings (`r'...'`) to
+  keep `\` from being interpreted as an escape character.
+- DrugCLIP IDs are matched against the local source LMDB (default
+  `external/DrugCLIP/mols.lmdb`).
+- PubChem CIDs like `"cid:2244"` or `"2244"` and PubChem compound names
+  are searched in [PubChem](https://pubchem.ncbi.nlm.nih.gov).
+
+If you pass the SMILES formula for a molecule that is not in the local
+source LMDB, it is resolved through PubChem when the argument
+`download_missing` is true (the default).
+
+For example, all of the calls below save an LMDB file named
+`data/oka.lmdb` containing the exact same information about **okadaic
+acid** as the query molecule:
+
+``` python
+import biosensia_target_fishing.py as tf
+
+# SMILES
+smi = (
+   r'C[C@@H]1CC[C@]2(CCCCO2)O[C@@H]1[C@@H](C)C[C@@H]([C@@H]3C(=C)[C@H]' +
+   r'([C@H]4[C@H](O3)CC[C@]5(O4)CC[C@@H](O5)/C=C/[C@@H](C)' +
+   r'[C@@H]6CC(=C[C@@]7(O6)[C@@H](CC[C@H](O7)C[C@](C)(C(=O)O)O)O)C)O)O'
+)
+tf.create_mol_lmdb(smi, 'data/oka.lmdb')
+
+# Pubchem CID or compound name
+tf.create_mol_lmdb('CID: 446512', 'data/oka.lmdb')
+tf.create_mol_lmdb('446512', 'data/oka.lmdb')
+tf.create_mol_lmdb('okadaic acid', 'data/oka.lmdb')
+```
+
+Okadaic acid is **not** in the local source LMDB file, so all of these
+calls resort to downloading data from PubChem.
+
+See the definition of the `create_mol_lmdb` function in
+[`biosensia_retrieval.py`](biosensia_retrieval.py) for more details.
+
+#### Run the search
+
+Target fishing is done by executing the shell script
+[`external/DrugCLIP/target_fishing.sh`](external/DrugCLIP/target_fishing.sh).
+Read the comments in that file to see how to configure it.
+
+``` bash
+cd ./external/DrugCLIP
+./target_fishing.sh
+```
+
+The first time the target fishing script is run, DrugCLIP must generate
+embeddings for **all** of the candidate pockets. This may take a long
+time. The generated embeddings are saved to a file in the directory
+specified by the `EMB_DIR` variable, whose default is
+`/data/pocket_emb`. Subsequent runs with the same set of candidate
+pockets will be much faster, as they will use these saved embeddings.
+
+The ranked list of pockets will be saved in a TSV file named
+`ranked_pockets.txt`, located in the same directory as the saved
+embeddings. Each line of the file will contain the PDB accession of the
+pocket (which is also the name of the subdirectory of
+`external/DrugCLIP/data/pdb/combine_set/` corresponding to the pocket)
+and its score (the maximum value of its compatibility with any molecule
+in the query).
+
+Because of hard-coded constraints in the original DrugCLIP code, a GPU
+must be available for the script to run.
+
+## Roadmap
+
+- Solve [open issues](issues).
+- Run target fishing benchmarks.
+- Implement BioSensIA-DC GUI.
