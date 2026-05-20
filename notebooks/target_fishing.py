@@ -88,7 +88,7 @@ def _(mo):
 
     ## Building the LMDB file of pockets
 
-    We built an LMDB file from the `external/DrugCLIP/data/pdb/combine_set` directory, using function `build_candidate_pockets_frame` in file [`biosensia_target_fishing.py`](biosensia_target_fishing.py). Here is a summary:
+    We built an LMDB file from the `external/DrugCLIP/data/pdb/combine_set` directory, using function `build_candidate_pockets` in file [`biosensia_target_fishing.py`](biosensia_target_fishing.py). Here is a summary of the contents of the LMDB file:
     """)
     return
 
