@@ -496,6 +496,6 @@ Because of hard-coded constraints in the original DrugCLIP code, a GPU must be a
 
 ## Roadmap
 
-- Solve [open issues](issues).
+- Solve [open issues](../../issues).
 - Run target fishing benchmarks.
 - Implement BioSensIA-DC GUI.

@@ -596,6 +596,6 @@ must be available for the script to run.
 
 ## Roadmap
 
-- Solve [open issues](issues).
+- Solve [open issues](../../issues).
 - Run target fishing benchmarks.
 - Implement BioSensIA-DC GUI.
