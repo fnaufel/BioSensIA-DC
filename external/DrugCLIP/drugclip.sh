@@ -8,6 +8,7 @@
 # GPU_ID=0,1 ./drugclip.sh       # explicit local multiple GPUs                     #
 # CUDA_VISIBLE_DEVICES=0,1 ./drugclip.sh  # explicit visible GPUs                   #
 # N_GPU=2 CUDA_VISIBLE_DEVICES=0,1 ./drugclip.sh  # override process count          #
+# NUM_WORKERS=2 ./drugclip.sh  # override DataLoader worker count                   #
 # srun ... ./drugclip.sh         # Sagres: respect SLURM's CUDA_VISIBLE_DEVICES     #
 #                                                                                   #
 # If CUDA_VISIBLE_DEVICES is unset, GPU_ID defaults to 0. By default N_GPU is        #
@@ -38,6 +39,7 @@ warmup=0.06
 dist_threshold=8.0
 recycling=3
 lr=1e-3
+num_workers="${NUM_WORKERS:-2}"
 
 if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
   export CUDA_VISIBLE_DEVICES="${GPU_ID:-0}"
@@ -69,7 +71,7 @@ python \
        --user-dir ./unimol \
        --train-subset train \
        --valid-subset valid \
-       --num-workers 8 \
+       --num-workers "$num_workers" \
        --ddp-backend=c10d \
        --task drugclip \
        --loss in_batch_softmax \
