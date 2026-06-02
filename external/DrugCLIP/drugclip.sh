@@ -31,11 +31,10 @@ finetune_pocket_model="pocket_pre_220816.pt" # unimol pretrained pocket model
 
 batch_size=48
 batch_size_valid=64
-batch_size_valid=128
+update_freq=1
 epoch=200
 dropout=0.0
 warmup=0.06
-update_freq=1
 dist_threshold=8.0
 recycling=3
 lr=1e-3
