@@ -1,3 +1,19 @@
+#!/usr/bin/env bash
+
+#####################################################################################
+# Usage:                                                                            #
+#                                                                                   #
+# ./drugclip.sh                  # local default: GPU 0                             #
+# GPU_ID=0 ./drugclip.sh         # explicit local single GPU                        #
+# GPU_ID=0,1 ./drugclip.sh       # explicit local multiple GPUs                     #
+# CUDA_VISIBLE_DEVICES=0,1 ./drugclip.sh  # explicit visible GPUs                   #
+# N_GPU=2 CUDA_VISIBLE_DEVICES=0,1 ./drugclip.sh  # override process count          #
+# srun ... ./drugclip.sh         # Sagres: respect SLURM's CUDA_VISIBLE_DEVICES     #
+#                                                                                   #
+# If CUDA_VISIBLE_DEVICES is unset, GPU_ID defaults to 0. By default N_GPU is        #
+# inferred from CUDA_VISIBLE_DEVICES; set N_GPU explicitly if your launcher needs    #
+# a different --nproc_per_node value.                                               #
+#####################################################################################
 
 
 data_path="data"
@@ -8,7 +24,6 @@ save_dir="savedir"
 tmp_save_dir="tmp_save_dir"
 tsb_dir="tsb_dir"
 
-n_gpu=1
 MASTER_PORT=10055
 finetune_mol_model="mol_pre_no_h_220816.pt" # unimol pretrained mol model
 finetune_pocket_model="pocket_pre_220816.pt" # unimol pretrained pocket model
@@ -25,9 +40,27 @@ dist_threshold=8.0
 recycling=3
 lr=1e-3
 
+if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
+  export CUDA_VISIBLE_DEVICES="${GPU_ID:-0}"
+fi
+
+if [ -n "${N_GPU:-}" ]; then
+  n_gpu="$N_GPU"
+else
+  visible_gpus="${CUDA_VISIBLE_DEVICES//,/ }"
+  n_gpu=0
+  for _gpu in $visible_gpus; do
+    n_gpu=$((n_gpu + 1))
+  done
+fi
+
+if [ "$n_gpu" -lt 1 ]; then
+  n_gpu=1
+fi
+
 export NCCL_ASYNC_ERROR_HANDLING=1
 export OMP_NUM_THREADS=1
-CUDA_VISIBLE_DEVICES="1" python -m torch.distributed.launch --nproc_per_node=$n_gpu --master_port=$MASTER_PORT $(which unicore-train) $data_path --user-dir ./unimol --train-subset train --valid-subset valid \
+python -m torch.distributed.launch --nproc_per_node=$n_gpu --master_port=$MASTER_PORT $(which unicore-train) $data_path --user-dir ./unimol --train-subset train --valid-subset valid \
        --num-workers 8 --ddp-backend=c10d \
        --task drugclip --loss in_batch_softmax --arch drugclip  \
        --max-pocket-atoms 256 \
