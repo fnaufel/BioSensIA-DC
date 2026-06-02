@@ -62,6 +62,7 @@ export NCCL_ASYNC_ERROR_HANDLING=1
 export OMP_NUM_THREADS=1
 python \
        -m torch.distributed.launch \
+       --use-env \
        --nproc_per_node="$n_gpu" \
        --master_port="$MASTER_PORT" \
        "$(which unicore-train)" \
