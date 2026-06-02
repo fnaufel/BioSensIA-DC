@@ -5,5 +5,10 @@
     "${workspaceFolder}/external/DrugCLIP"
   ],
   "python.analysis.useLibraryCodeForTypes": true,
-  "python.analysis.inlayHints.functionReturnTypes": true
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "files.watcherExclude": {
+    "*/data/**": true,
+    "external/DrugCLIP/data/**": true,
+    "external/unimol/data/**": true
+  }
 }
