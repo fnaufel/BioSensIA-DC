@@ -29,9 +29,9 @@ finetune_mol_model="mol_pre_no_h_220816.pt" # unimol pretrained mol model
 finetune_pocket_model="pocket_pre_220816.pt" # unimol pretrained pocket model
 
 
-batch_size=48
-batch_size_valid=64
-update_freq=1
+batch_size=8
+batch_size_valid=16
+update_freq=6
 epoch=200
 dropout=0.0
 warmup=0.06
