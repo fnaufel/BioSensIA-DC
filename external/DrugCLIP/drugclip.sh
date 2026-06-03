@@ -61,6 +61,22 @@ fi
 
 export NCCL_ASYNC_ERROR_HANDLING=1
 export OMP_NUM_THREADS=1
+
+# A fix for warning about CUDA extensions not being properly installed on SAGRES
+#
+# fused_multi_tensor is not installed corrected
+# fused_rounding is not installed corrected
+# fused_layer_norm is not installed corrected
+# fused_rms_norm is not installed corrected
+# fused_softmax is not installed corrected
+#
+export LD_LIBRARY_PATH="$(python - <<'PY'
+from pathlib import Path
+import torch
+print(Path(torch.__file__).parent / "lib")
+PY
+):${LD_LIBRARY_PATH:-}"
+
 python \
        -m torch.distributed.launch \
        --use-env \
