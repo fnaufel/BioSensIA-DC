@@ -25,7 +25,7 @@ echo "CPUs per task: ${SLURM_CPUS_PER_TASK}"
 spack load cuda@12.4.1
 source "$REPO_DIR/.venv/bin/activate"
 
-export NUM_WORKERS=2
+export NUM_WORKERS=4
 export N_GPU=1
 
 bash ./drugclip.sh
