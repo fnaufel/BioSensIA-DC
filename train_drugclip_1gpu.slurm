@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=6
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=24:00:00
 #SBATCH --output=drugclip-%j.out
@@ -25,7 +25,7 @@ echo "CPUs per task: ${SLURM_CPUS_PER_TASK}"
 spack load cuda@12.4.1
 source "$REPO_DIR/.venv/bin/activate"
 
-export NUM_WORKERS=4
+export NUM_WORKERS=2
 export N_GPU=1
 
 bash ./drugclip.sh
