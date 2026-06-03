@@ -68,6 +68,17 @@ if [ -f "$SCRIPT_DIR/env_drugclip.sh" ]; then
   source "$SCRIPT_DIR/env_drugclip.sh"
 fi
 
+# Diags
+echo "python = $(which python)"
+echo "CUDA_HOME = ${CUDA_HOME:-<unset>}"
+echo "LD_LIBRARY_PATH = ${LD_LIBRARY_PATH:-<unset>}"
+python - <<'PY'
+import sys, torch
+print("python:", sys.executable)
+print("torch:", torch.__version__)
+print("torch.version.cuda:", torch.version.cuda)
+PY
+
 python \
        -m torch.distributed.launch \
        --use-env \

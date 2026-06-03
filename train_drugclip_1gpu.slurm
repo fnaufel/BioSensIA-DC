@@ -28,4 +28,4 @@ source "$REPO_DIR/.venv/bin/activate"
 export NUM_WORKERS=2
 export N_GPU=1
 
-bash ./drugclip.sh
+./drugclip.sh
