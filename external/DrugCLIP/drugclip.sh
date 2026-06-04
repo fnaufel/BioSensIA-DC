@@ -64,8 +64,8 @@ export OMP_NUM_THREADS=1
 
 # To fix problem importing CUDA extensions on Sagres:
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/env_drugclip.sh" ]; then
-  source "$SCRIPT_DIR/env_drugclip.sh"
+if [ -f "$SCRIPT_DIR/env-drugclip.sh" ]; then
+  source "$SCRIPT_DIR/env-drugclip.sh"
 fi
 
 # Diags
