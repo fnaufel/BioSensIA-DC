@@ -17,6 +17,7 @@ external/DrugCLIP/*.lmdb
 # Save data
 external/Uni-Core/examples/bert/save
 .positai
+external/DrugCLIP/savedir
 
 # R project
 .Rproj.user/
@@ -24,3 +25,6 @@ external/Uni-Core/examples/bert/save
 /data/candidate_pockets.lmdb
 /data/mols_index.lmdb
 /data/molecules/
+
+# Libraries
+external/Uni-Core/*.so

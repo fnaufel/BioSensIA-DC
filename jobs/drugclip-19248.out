@@ -1,0 +1,581 @@
+Job ID: 19248
+Node: pedro-alvares-cabral
+CUDA_VISIBLE_DEVICES=0
+CPUs per task: 4
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+2026-06-03 15:23:33 | INFO | unicore.distributed.utils | distributed init (rank 0): env://
+2026-06-03 15:23:33 | INFO | unicore.distributed.utils | initialized host pedro-alvares-cabral as rank 0
+2026-06-03 15:23:33 | INFO | unicore_cli.train | Namespace(no_progress_bar=False, log_interval=100, log_format='simple', tensorboard_logdir='tsb_dir', wandb_project='', wandb_name='', seed=1, cpu=False, fp16=True, bf16=False, bf16_sr=False, allreduce_fp32_grad=False, fp16_no_flatten_grads=False, fp16_init_scale=4, fp16_scale_window=256, fp16_scale_tolerance=0.0, min_loss_scale=0.0001, threshold_loss_scale=None, user_dir='./unimol', empty_cache_freq=0, all_gather_list_size=2048000, suppress_crashes=False, profile=False, ema_decay=-1.0, validate_with_ema=False, loss='in_batch_softmax', optimizer='adam', lr_scheduler='polynomial_decay', task='drugclip', num_workers=2, skip_invalid_size_inputs_valid_test=False, batch_size=16, required_batch_size_multiple=1, data_buffer_size=10, train_subset='train', valid_subset='valid', validate_interval=1, validate_interval_updates=0, validate_after_updates=0, fixed_validation_seed=None, disable_validation=False, batch_size_valid=16, max_valid_steps=None, curriculum=0, distributed_world_size=1, distributed_rank=0, distributed_backend='nccl', distributed_init_method='env://', distributed_port=-1, device_id=0, distributed_no_spawn=True, ddp_backend='c10d', bucket_cap_mb=25, fix_batches_to_gpus=False, find_unused_parameters=True, fast_stat_sync=False, broadcast_buffers=False, nprocs_per_node=1, arch='drugclip', max_epoch=200, max_update=0, stop_time_hours=0, no_weight_decay_names='', clip_norm=1.0, per_sample_clip_norm=0, update_freq=[4], lr=[0.001], stop_min_lr=-1, save_dir='savedir', tmp_save_dir='tmp_save_dir', restore_file='checkpoint_last.pt', finetune_from_model=None, load_from_ema=False, reset_dataloader=False, reset_lr_scheduler=False, reset_meters=False, reset_optimizer=False, optimizer_overrides='{}', save_interval=1, save_interval_updates=0, keep_interval_updates=-1, keep_last_epochs=5, keep_best_checkpoints=-1, no_save=False, no_epoch_checkpoints=False, no_last_checkpoints=False, no_save_optimizer_state=False, best_checkpoint_metric='valid_bedroc', maximize_best_checkpoint_metric=True, patience=2000, checkpoint_suffix='', recycling=1, data='data', finetune_mol_model='mol_pre_no_h_220816.pt', finetune_pocket_model='pocket_pre_220816.pt', dist_threshold=6.0, max_pocket_atoms=256, test_model=False, reg=False, adam_betas='(0.9, 0.999)', adam_eps=1e-08, weight_decay=0.0, force_anneal=None, warmup_updates=0, warmup_ratio=0.06, end_learning_rate=0.0, power=1.0, total_num_update=1000000, no_seed_provided=False, mol=Namespace(encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0), pocket=Namespace(encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0), encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0)
+2026-06-03 15:23:33 | INFO | unimol.tasks.drugclip | ligand dictionary: 30 types
+2026-06-03 15:23:33 | INFO | unimol.tasks.drugclip | pocket dictionary: 9 types
+23567 0.1
+23567 0.1
+load pretrain model weight from... mol_pre_no_h_220816.pt
+load pretrain model weight from... pocket_pre_220816.pt
+2026-06-03 15:23:34 | INFO | unicore_cli.train | BindingAffinityModel(
+  (mol_model): UniMolModel(
+    (embed_tokens): Embedding(31, 512, padding_idx=0)
+    (encoder): TransformerEncoderWithPair(
+      (emb_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (layers): ModuleList(
+        (0-14): 15 x TransformerEncoderLayer(
+          (self_attn): SelfMultiheadAttention(
+            (in_proj): Linear(in_features=512, out_features=1536, bias=True)
+            (out_proj): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=512, out_features=2048, bias=True)
+          (fc2): Linear(in_features=2048, out_features=512, bias=True)
+          (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+        )
+      )
+    )
+    (gbf_proj): NonLinearHead(
+      (linear1): Linear(in_features=128, out_features=128, bias=True)
+      (linear2): Linear(in_features=128, out_features=64, bias=True)
+    )
+    (gbf): GaussianLayer(
+      (means): Embedding(1, 128)
+      (stds): Embedding(1, 128)
+      (mul): Embedding(961, 1)
+      (bias): Embedding(961, 1)
+    )
+    (classification_heads): ModuleDict()
+  )
+  (pocket_model): UniMolModel(
+    (embed_tokens): Embedding(10, 512, padding_idx=0)
+    (encoder): TransformerEncoderWithPair(
+      (emb_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (layers): ModuleList(
+        (0-14): 15 x TransformerEncoderLayer(
+          (self_attn): SelfMultiheadAttention(
+            (in_proj): Linear(in_features=512, out_features=1536, bias=True)
+            (out_proj): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=512, out_features=2048, bias=True)
+          (fc2): Linear(in_features=2048, out_features=512, bias=True)
+          (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+        )
+      )
+    )
+    (gbf_proj): NonLinearHead(
+      (linear1): Linear(in_features=128, out_features=128, bias=True)
+      (linear2): Linear(in_features=128, out_features=64, bias=True)
+    )
+    (gbf): GaussianLayer(
+      (means): Embedding(1, 128)
+      (stds): Embedding(1, 128)
+      (mul): Embedding(100, 1)
+      (bias): Embedding(100, 1)
+    )
+    (classification_heads): ModuleDict()
+  )
+  (cross_distance_project): NonLinearHead(
+    (linear1): Linear(in_features=1088, out_features=1088, bias=True)
+    (linear2): Linear(in_features=1088, out_features=1, bias=True)
+  )
+  (holo_distance_project): DistanceHead(
+    (dense): Linear(in_features=576, out_features=576, bias=True)
+    (layer_norm): LayerNorm((576,), eps=1e-05, elementwise_affine=True)
+    (out_proj): Linear(in_features=576, out_features=1, bias=True)
+  )
+  (mol_project): NonLinearHead(
+    (linear1): Linear(in_features=512, out_features=512, bias=True)
+    (linear2): Linear(in_features=512, out_features=128, bias=True)
+  )
+  (pocket_project): NonLinearHead(
+    (linear1): Linear(in_features=512, out_features=512, bias=True)
+    (linear2): Linear(in_features=512, out_features=128, bias=True)
+  )
+  (fuse_project): NonLinearHead(
+    (linear1): Linear(in_features=256, out_features=256, bias=True)
+    (linear2): Linear(in_features=256, out_features=1, bias=True)
+  )
+  (classification_head): Sequential(
+    (0): Linear(in_features=1024, out_features=1024, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=1024, out_features=512, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=512, out_features=256, bias=True)
+    (5): ReLU()
+    (6): Linear(in_features=256, out_features=128, bias=True)
+    (7): ReLU()
+    (8): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+2026-06-03 15:23:34 | INFO | unicore_cli.train | task: DrugCLIP
+2026-06-03 15:23:34 | INFO | unicore_cli.train | model: BindingAffinityModel
+2026-06-03 15:23:34 | INFO | unicore_cli.train | loss: IBSLoss
+2026-06-03 15:23:34 | INFO | unicore_cli.train | num. model params: 98,630,223 (num. trained: 98,630,223)
+2026-06-03 15:23:34 | INFO | unicore.utils | ***********************CUDA enviroments for all 1 workers***********************
+2026-06-03 15:23:34 | INFO | unicore.utils | rank   0: capabilities =  8.6  ; total memory = 14.529 GB ; name = NVIDIA A2                               
+2026-06-03 15:23:34 | INFO | unicore.utils | ***********************CUDA enviroments for all 1 workers***********************
+2026-06-03 15:23:34 | INFO | unicore_cli.train | training on 1 devices (GPUs)
+2026-06-03 15:23:34 | INFO | unicore_cli.train | batch size per device = 16
+2026-06-03 15:23:34 | INFO | unicore.trainer | Preparing to load checkpoint savedir/checkpoint_last.pt
+2026-06-03 15:23:36 | INFO | unicore.trainer | loading train data for epoch 16
+2026-06-03 15:23:36 | INFO | unimol.data.resampling_dataset | ResamplingDataset.set_epoch: 1
+2026-06-03 15:23:36 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 16
+2026-06-03 15:23:36 | INFO | unimol.data.resampling_dataset | ResamplingDataset.set_epoch: 16
+2026-06-03 15:23:37 | INFO | unicore.trainer | Loaded checkpoint savedir/checkpoint_last.pt (epoch 16 @ 1374 updates)
+2026-06-03 15:23:37 | INFO | unimol.data.resampling_dataset | ResamplingDataset.set_epoch: 16
+2026-06-03 15:23:37 | INFO | unicore.trainer | begin training epoch 16
+2026-06-03 15:23:37 | INFO | unicore_cli.train | Start iterating over samples
+2026-06-03 15:24:19 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 182.00 MiB is free. Including non-PyTorch memory, this process has 14.34 GiB memory in use. Of the allocated memory 13.69 GiB is allocated by PyTorch, and 261.23 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:24:19 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 1            |        cudaMalloc retries: 4         |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14014 MiB |  14146 MiB |   1547 GiB |   1533 GiB |
+|       from large pool |  14012 MiB |  14144 MiB |   1535 GiB |   1521 GiB |
+|       from small pool |      1 MiB |      2 MiB |     12 GiB |     12 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14014 MiB |  14146 MiB |   1547 GiB |   1533 GiB |
+|       from large pool |  14012 MiB |  14144 MiB |   1535 GiB |   1521 GiB |
+|       from small pool |      1 MiB |      2 MiB |     12 GiB |     12 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13999 MiB |  14131 MiB |   1544 GiB |   1530 GiB |
+|       from large pool |  13997 MiB |  14129 MiB |   1531 GiB |   1518 GiB |
+|       from small pool |      1 MiB |      2 MiB |     12 GiB |     12 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14276 MiB |  14412 MiB |  31222 MiB |  16946 MiB |
+|       from large pool |  14268 MiB |  14268 MiB |  30948 MiB |  16680 MiB |
+|       from small pool |      8 MiB |    144 MiB |    274 MiB |    266 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 267503 KiB |    828 MiB | 745120 MiB | 744859 MiB |
+|       from large pool | 261180 KiB |    822 MiB | 731651 MiB | 731396 MiB |
+|       from small pool |   6323 KiB |      8 MiB |  13468 MiB |  13462 MiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     670    |     670    |  115583    |  114913    |
+|       from large pool |     496    |     496    |   68274    |   67778    |
+|       from small pool |     174    |     174    |   47309    |   47135    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     670    |     670    |  115583    |  114913    |
+|       from large pool |     496    |     496    |   68274    |   67778    |
+|       from small pool |     174    |     174    |   47309    |   47135    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |     108    |     176    |     389    |     281    |
+|       from large pool |     104    |     104    |     252    |     148    |
+|       from small pool |       4    |      72    |     137    |     133    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      65    |      66    |   65397    |   65332    |
+|       from large pool |      57    |      58    |   38943    |   38886    |
+|       from small pool |       8    |      13    |   26454    |   26446    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:24:19 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:24:43 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 138.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 42.00 MiB is free. Including non-PyTorch memory, this process has 14.48 GiB memory in use. Of the allocated memory 13.86 GiB is allocated by PyTorch, and 218.70 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:24:43 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 2            |        cudaMalloc retries: 6         |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14197 MiB |  14263 MiB |   2477 GiB |   2463 GiB |
+|       from large pool |  14195 MiB |  14261 MiB |   2459 GiB |   2445 GiB |
+|       from small pool |      1 MiB |     22 MiB |     18 GiB |     18 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14197 MiB |  14263 MiB |   2477 GiB |   2463 GiB |
+|       from large pool |  14195 MiB |  14261 MiB |   2459 GiB |   2445 GiB |
+|       from small pool |      1 MiB |     22 MiB |     18 GiB |     18 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  14164 MiB |  14229 MiB |   2472 GiB |   2458 GiB |
+|       from large pool |  14162 MiB |  14228 MiB |   2454 GiB |   2440 GiB |
+|       from small pool |      1 MiB |     22 MiB |     18 GiB |     18 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14416 MiB |  14416 MiB |  31494 MiB |  17078 MiB |
+|       from large pool |  14406 MiB |  14406 MiB |  31086 MiB |  16680 MiB |
+|       from small pool |     10 MiB |    142 MiB |    408 MiB |    398 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 223949 KiB |    792 MiB |   1183 GiB |   1183 GiB |
+|       from large pool | 215488 KiB |    789 MiB |   1163 GiB |   1163 GiB |
+|       from small pool |   8461 KiB |      9 MiB |     19 GiB |     19 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     631    |     694    |  184268    |  183637    |
+|       from large pool |     467    |     467    |  110331    |  109864    |
+|       from small pool |     164    |     231    |   73937    |   73773    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     631    |     694    |  184268    |  183637    |
+|       from large pool |     467    |     467    |  110331    |  109864    |
+|       from small pool |     164    |     231    |   73937    |   73773    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |     110    |     175    |     457    |     347    |
+|       from large pool |     105    |     105    |     253    |     148    |
+|       from small pool |       5    |      71    |     204    |     199    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      60    |      77    |  103562    |  103502    |
+|       from large pool |      52    |      55    |   62691    |   62639    |
+|       from small pool |       8    |      24    |   40871    |   40863    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:24:43 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:24:54 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 212.00 MiB is free. Including non-PyTorch memory, this process has 14.31 GiB memory in use. Of the allocated memory 13.68 GiB is allocated by PyTorch, and 241.95 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:24:54 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 3            |        cudaMalloc retries: 9         |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14004 MiB |  14004 MiB |   2868 GiB |   2854 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   2847 GiB |   2833 GiB |
+|       from small pool |      1 MiB |     31 MiB |     21 GiB |     21 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14004 MiB |  14004 MiB |   2868 GiB |   2854 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   2847 GiB |   2833 GiB |
+|       from small pool |      1 MiB |     31 MiB |     21 GiB |     21 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13973 MiB |  13973 MiB |   2862 GiB |   2848 GiB |
+|       from large pool |  13971 MiB |  13971 MiB |   2841 GiB |   2827 GiB |
+|       from small pool |      1 MiB |     31 MiB |     21 GiB |     21 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14246 MiB |  14380 MiB |  47962 MiB |  33716 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |      8 MiB |    142 MiB |    642 MiB |    634 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 247755 KiB |   1177 MiB |   1401 GiB |   1401 GiB |
+|       from large pool | 241400 KiB |   1175 MiB |   1378 GiB |   1378 GiB |
+|       from small pool |   6355 KiB |      8 MiB |     22 GiB |     22 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     677    |     696    |  213927    |  213250    |
+|       from large pool |     497    |     497    |  128420    |  127923    |
+|       from small pool |     180    |     232    |   85507    |   85327    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     677    |     696    |  213927    |  213250    |
+|       from large pool |     497    |     497    |  128420    |  127923    |
+|       from small pool |     180    |     232    |   85507    |   85327    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      74    |     141    |     661    |     587    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       4    |      71    |     321    |     317    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      34    |      67    |  119410    |  119376    |
+|       from large pool |      27    |      38    |   72531    |   72504    |
+|       from small pool |       7    |      29    |   46879    |   46872    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:24:54 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:25:20 | INFO | train_inner | epoch 016:     29 / 1034 scale=13.992, loss=1.47, ups=0.02, bsz=51.9, num_updates=1400, lr=0.00011283, gnorm=87.001, clip=100, loss_scale=1, train_wall=292.79, gb_free=2, wall=0
+2026-06-03 15:25:42 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 212.00 MiB is free. Including non-PyTorch memory, this process has 14.31 GiB memory in use. Of the allocated memory 13.69 GiB is allocated by PyTorch, and 225.36 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:25:42 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 4            |        cudaMalloc retries: 10        |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14020 MiB |  14152 MiB |   4674 GiB |   4661 GiB |
+|       from large pool |  14018 MiB |  14150 MiB |   4637 GiB |   4623 GiB |
+|       from small pool |      1 MiB |      2 MiB |     37 GiB |     37 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14020 MiB |  14152 MiB |   4674 GiB |   4661 GiB |
+|       from large pool |  14018 MiB |  14150 MiB |   4637 GiB |   4623 GiB |
+|       from small pool |      1 MiB |      2 MiB |     37 GiB |     37 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13999 MiB |  14131 MiB |   4664 GiB |   4650 GiB |
+|       from large pool |  13997 MiB |  14129 MiB |   4626 GiB |   4613 GiB |
+|       from small pool |      1 MiB |      2 MiB |     37 GiB |     37 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14246 MiB |  14382 MiB |  48098 MiB |  33852 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |      8 MiB |    144 MiB |    778 MiB |    770 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 230767 KiB |    793 MiB |   2347 GiB |   2347 GiB |
+|       from large pool | 224444 KiB |    786 MiB |   2307 GiB |   2307 GiB |
+|       from small pool |   6323 KiB |     11 MiB |     40 GiB |     40 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     670    |     670    |  349456    |  348786    |
+|       from large pool |     496    |     496    |  206096    |  205600    |
+|       from small pool |     174    |     174    |  143360    |  143186    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     670    |     670    |  349456    |  348786    |
+|       from large pool |     496    |     496    |  206096    |  205600    |
+|       from small pool |     174    |     174    |  143360    |  143186    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      74    |     142    |     729    |     655    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       4    |      72    |     389    |     385    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      30    |      33    |  194274    |  194244    |
+|       from large pool |      23    |      26    |  115250    |  115227    |
+|       from small pool |       7    |      13    |   79024    |   79017    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:25:42 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:26:10 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 212.00 MiB is free. Including non-PyTorch memory, this process has 14.31 GiB memory in use. Of the allocated memory 13.68 GiB is allocated by PyTorch, and 241.95 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:26:10 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 5            |        cudaMalloc retries: 11        |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14004 MiB |  14004 MiB |   5723 GiB |   5710 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   5676 GiB |   5662 GiB |
+|       from small pool |      1 MiB |    142 MiB |     47 GiB |     47 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14004 MiB |  14004 MiB |   5723 GiB |   5710 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   5676 GiB |   5662 GiB |
+|       from small pool |      1 MiB |    142 MiB |     47 GiB |     47 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13973 MiB |  13973 MiB |   5711 GiB |   5697 GiB |
+|       from large pool |  13971 MiB |  13971 MiB |   5664 GiB |   5650 GiB |
+|       from small pool |      1 MiB |    142 MiB |     47 GiB |     47 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14246 MiB |  14382 MiB |  48234 MiB |  33988 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |      8 MiB |    144 MiB |    914 MiB |    906 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 247756 KiB |    986 MiB |   2905 GiB |   2905 GiB |
+|       from large pool | 241400 KiB |    976 MiB |   2854 GiB |   2854 GiB |
+|       from small pool |   6356 KiB |     10 MiB |     50 GiB |     50 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     675    |     694    |  428228    |  427553    |
+|       from large pool |     497    |     497    |  251119    |  250622    |
+|       from small pool |     178    |     352    |  177109    |  176931    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     675    |     694    |  428228    |  427553    |
+|       from large pool |     497    |     497    |  251119    |  250622    |
+|       from small pool |     178    |     352    |  177109    |  176931    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      74    |     142    |     797    |     723    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       4    |      72    |     457    |     453    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      33    |      73    |  239217    |  239184    |
+|       from large pool |      27    |      55    |  140027    |  140000    |
+|       from small pool |       6    |      33    |   99190    |   99184    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:26:10 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:26:25 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 210.00 MiB is free. Including non-PyTorch memory, this process has 14.32 GiB memory in use. Of the allocated memory 13.68 GiB is allocated by PyTorch, and 243.95 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:26:25 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 6            |        cudaMalloc retries: 12        |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14004 MiB |  14004 MiB |   6279 GiB |   6266 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   6228 GiB |   6215 GiB |
+|       from small pool |      1 MiB |     38 MiB |     50 GiB |     50 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14004 MiB |  14004 MiB |   6279 GiB |   6266 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   6228 GiB |   6215 GiB |
+|       from small pool |      1 MiB |     38 MiB |     50 GiB |     50 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13973 MiB |  13973 MiB |   6266 GiB |   6252 GiB |
+|       from large pool |  13971 MiB |  13971 MiB |   6215 GiB |   6201 GiB |
+|       from small pool |      1 MiB |     38 MiB |     50 GiB |     50 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14248 MiB |  14382 MiB |  48370 MiB |  34122 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |     10 MiB |    144 MiB |   1050 MiB |   1040 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 249803 KiB |   1493 MiB |   3216 GiB |   3216 GiB |
+|       from large pool | 241400 KiB |   1489 MiB |   3162 GiB |   3161 GiB |
+|       from small pool |   8403 KiB |      9 MiB |     54 GiB |     54 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     677    |     696    |  468495    |  467818    |
+|       from large pool |     497    |     497    |  275988    |  275491    |
+|       from small pool |     180    |     232    |  192507    |  192327    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     677    |     696    |  468495    |  467818    |
+|       from large pool |     497    |     497    |  275988    |  275491    |
+|       from small pool |     180    |     232    |  192507    |  192327    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      75    |     142    |     865    |     790    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       5    |      72    |     525    |     520    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      36    |      82    |  261538    |  261502    |
+|       from large pool |      27    |      59    |  153509    |  153482    |
+|       from small pool |       9    |      30    |  108029    |  108020    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:26:25 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:27:12 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 214.00 MiB is free. Including non-PyTorch memory, this process has 14.31 GiB memory in use. Of the allocated memory 13.68 GiB is allocated by PyTorch, and 239.95 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:27:12 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 7            |        cudaMalloc retries: 13        |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14004 MiB |  14004 MiB |   8036 GiB |   8023 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   7972 GiB |   7958 GiB |
+|       from small pool |      1 MiB |    142 MiB |     64 GiB |     64 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14004 MiB |  14004 MiB |   8036 GiB |   8023 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   7972 GiB |   7958 GiB |
+|       from small pool |      1 MiB |    142 MiB |     64 GiB |     64 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13973 MiB |  13973 MiB |   8019 GiB |   8006 GiB |
+|       from large pool |  13971 MiB |  13971 MiB |   7955 GiB |   7941 GiB |
+|       from small pool |      1 MiB |    142 MiB |     64 GiB |     64 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14244 MiB |  14382 MiB |  48504 MiB |  34260 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |      6 MiB |    144 MiB |   1184 MiB |   1178 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 245708 KiB |    911 MiB |   4192 GiB |   4191 GiB |
+|       from large pool | 241400 KiB |    906 MiB |   4122 GiB |   4122 GiB |
+|       from small pool |   4308 KiB |      9 MiB |     69 GiB |     69 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     675    |     694    |  599947    |  599272    |
+|       from large pool |     497    |     497    |  354058    |  353561    |
+|       from small pool |     178    |     354    |  245889    |  245711    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     675    |     694    |  599947    |  599272    |
+|       from large pool |     497    |     497    |  354058    |  353561    |
+|       from small pool |     178    |     354    |  245889    |  245711    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      73    |     142    |     932    |     859    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       3    |      72    |     592    |     589    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      34    |      85    |  335081    |  335047    |
+|       from large pool |      27    |      55    |  196291    |  196264    |
+|       from small pool |       7    |      60    |  138790    |  138783    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:27:12 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:27:13 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 216.00 MiB is free. Including non-PyTorch memory, this process has 14.31 GiB memory in use. Of the allocated memory 13.68 GiB is allocated by PyTorch, and 237.95 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:27:13 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 8            |        cudaMalloc retries: 14        |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14004 MiB |  14004 MiB |   8089 GiB |   8075 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   8024 GiB |   8010 GiB |
+|       from small pool |      1 MiB |    142 MiB |     65 GiB |     65 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14004 MiB |  14004 MiB |   8089 GiB |   8075 GiB |
+|       from large pool |  14002 MiB |  14002 MiB |   8024 GiB |   8010 GiB |
+|       from small pool |      1 MiB |    142 MiB |     65 GiB |     65 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13973 MiB |  13973 MiB |   8072 GiB |   8058 GiB |
+|       from large pool |  13971 MiB |  13971 MiB |   8006 GiB |   7993 GiB |
+|       from small pool |      1 MiB |    142 MiB |     65 GiB |     65 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14242 MiB |  14382 MiB |  48624 MiB |  34382 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |      4 MiB |    144 MiB |   1304 MiB |   1300 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 243661 KiB |   1063 MiB |   4221 GiB |   4220 GiB |
+|       from large pool | 241400 KiB |   1059 MiB |   4150 GiB |   4150 GiB |
+|       from small pool |   2261 KiB |     22 MiB |     70 GiB |     70 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     673    |     694    |  603536    |  602863    |
+|       from large pool |     497    |     497    |  356016    |  355519    |
+|       from small pool |     176    |     354    |  247520    |  247344    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     673    |     694    |  603536    |  602863    |
+|       from large pool |     497    |     497    |  356016    |  355519    |
+|       from small pool |     176    |     354    |  247520    |  247344    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      72    |     142    |     992    |     920    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       2    |      72    |     652    |     650    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      32    |     126    |  337089    |  337057    |
+|       from large pool |      27    |      55    |  197377    |  197350    |
+|       from small pool |       5    |      75    |  139712    |  139707    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:27:13 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
+2026-06-03 15:27:47 | WARNING | unicore.trainer | OOM: Ran out of memory with exception: CUDA out of memory. Tried to allocate 274.00 MiB. GPU 0 has a total capacity of 14.53 GiB of which 214.00 MiB is free. Including non-PyTorch memory, this process has 14.31 GiB memory in use. Of the allocated memory 13.69 GiB is allocated by PyTorch, and 223.36 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-06-03 15:27:47 | WARNING | unicore.trainer | |===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 9            |        cudaMalloc retries: 15        |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |  14020 MiB |  14152 MiB |   9365 GiB |   9351 GiB |
+|       from large pool |  14018 MiB |  14150 MiB |   9290 GiB |   9276 GiB |
+|       from small pool |      1 MiB |      2 MiB |     75 GiB |     75 GiB |
+|---------------------------------------------------------------------------|
+| Active memory         |  14020 MiB |  14152 MiB |   9365 GiB |   9351 GiB |
+|       from large pool |  14018 MiB |  14150 MiB |   9290 GiB |   9276 GiB |
+|       from small pool |      1 MiB |      2 MiB |     75 GiB |     75 GiB |
+|---------------------------------------------------------------------------|
+| Requested memory      |  13999 MiB |  14131 MiB |   9345 GiB |   9331 GiB |
+|       from large pool |  13997 MiB |  14129 MiB |   9270 GiB |   9256 GiB |
+|       from small pool |      1 MiB |      2 MiB |     75 GiB |     75 GiB |
+|---------------------------------------------------------------------------|
+| GPU reserved memory   |  14244 MiB |  14382 MiB |  48764 MiB |  34520 MiB |
+|       from large pool |  14238 MiB |  14238 MiB |  47320 MiB |  33082 MiB |
+|       from small pool |      6 MiB |    144 MiB |   1444 MiB |   1438 MiB |
+|---------------------------------------------------------------------------|
+| Non-releasable memory | 228719 KiB |    791 MiB |   4922 GiB |   4922 GiB |
+|       from large pool | 224444 KiB |    786 MiB |   4842 GiB |   4841 GiB |
+|       from small pool |   4275 KiB |      9 MiB |     80 GiB |     80 GiB |
+|---------------------------------------------------------------------------|
+| Allocations           |     670    |     670    |  698309    |  697639    |
+|       from large pool |     496    |     496    |  412500    |  412004    |
+|       from small pool |     174    |     174    |  285809    |  285635    |
+|---------------------------------------------------------------------------|
+| Active allocs         |     670    |     670    |  698309    |  697639    |
+|       from large pool |     496    |     496    |  412500    |  412004    |
+|       from small pool |     174    |     174    |  285809    |  285635    |
+|---------------------------------------------------------------------------|
+| GPU reserved segments |      73    |     142    |    1062    |     989    |
+|       from large pool |      70    |      70    |     340    |     270    |
+|       from small pool |       3    |      72    |     722    |     719    |
+|---------------------------------------------------------------------------|
+| Non-releasable allocs |      28    |      31    |  389894    |  389866    |
+|       from large pool |      23    |      26    |  228121    |  228098    |
+|       from small pool |       5    |      15    |  161773    |  161768    |
+|---------------------------------------------------------------------------|
+| Oversize allocations  |       0    |       0    |       0    |       0    |
+|---------------------------------------------------------------------------|
+| Oversize GPU segments |       0    |       0    |       0    |       0    |
+|===========================================================================|
+
+2026-06-03 15:27:47 | WARNING | unicore.trainer | attempting to recover from OOM in forward/backward pass
