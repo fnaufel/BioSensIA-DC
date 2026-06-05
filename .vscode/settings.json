@@ -7,7 +7,8 @@
   "python.analysis.useLibraryCodeForTypes": true,
   "python.analysis.inlayHints.functionReturnTypes": true,
   "files.watcherExclude": {
-    "*/data/**": true,
+    "**/data/**": true,
+    "**/jobs/**": true,
     "external/DrugCLIP/data/**": true,
     "external/unimol/data/**": true
   }
