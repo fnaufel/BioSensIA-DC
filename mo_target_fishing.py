@@ -243,7 +243,6 @@ def _(mo):
 def _(sh):
     sh(
         'cat -n external/DrugCLIP/data/pocket_emb/ranked_pockets.txt | head -n50',
-        cwd='..',
         language='text'
     )
     return
@@ -259,7 +258,7 @@ def _(mo):
 
 @app.cell
 def _(tf):
-    df_ranked = tf.build_ranked_pockets_frame('../external/DrugCLIP/data/pocket_emb/ranked_pockets.txt')
+    df_ranked = tf.build_ranked_pockets_frame('external/DrugCLIP/data/pocket_emb/ranked_pockets.txt')
     df_ranked
     return (df_ranked,)
 
@@ -274,7 +273,7 @@ def _(Path, df_ranked):
         escape=False,
     )
 
-    Path("../external/DrugCLIP/data/pocket_emb/ranked_pockets.html").write_text(
+    Path("external/DrugCLIP/data/pocket_emb/ranked_pockets.html").write_text(
         f"""<!doctype html>
     <html>
     <head><meta charset="utf-8"><title>Ranked pockets</title></head>

@@ -1,0 +1,304 @@
+{
+  "chembl_id_by_inchikey": {
+    "BCGQSBZQJMLGTC-GOTSBHOMSA-N": null,
+    "CTQNGGLPUBDAKN-UHFFFAOYSA-N": "CHEMBL45005",
+    "CZMRCDWAGMRECN-UGDNZRGBSA-N": "CHEMBL253582",
+    "FJQWWGCHPFSERW-CQSZACIVSA-N": null,
+    "IKUNLBZZXQAOEH-GOTSBHOMSA-N": null,
+    "JVSBYEDSSRZQGV-GUBZILKMSA-O": null,
+    "JXPMSVJLAROPAI-GOTSBHOMSA-N": null,
+    "KXUHSQYYJYAXGZ-UHFFFAOYSA-N": "CHEMBL195882",
+    "LMADZBIAOYLZDD-GOTSBHOMSA-N": "CHEMBL59201",
+    "LYGDXUXRWFVLNH-HJNYFJLDSA-N": null,
+    "NCEXYHBECQHGNR-QZQOTICOSA-N": "CHEMBL421",
+    "OCKPCBLVNKHBMX-UHFFFAOYSA-N": "CHEMBL195441",
+    "RJKFOVLPORLFTN-LEKSSAKUSA-N": "CHEMBL103",
+    "SIKJAQJRHWYJAI-UHFFFAOYSA-N": "CHEMBL15844",
+    "URLKBWYHVLBVBO-UHFFFAOYSA-N": "CHEMBL31561",
+    "VWQBAZQMKBHYJA-QYVSTXNMSA-N": "CHEMBL1160562",
+    "XJTHIRMZZQABBU-UBHSHLNASA-O": null,
+    "XNDVCNQEUAIBID-VXKWHMMOSA-N": null,
+    "ZPSKWMFLCHMEOY-CMKODMSKSA-O": null,
+    "ZRJNSRDWYFDFAT-OUZOMVJXSA-N": null
+  },
+  "pdb_uniprot_mappings": {
+    "10gs": [
+      {
+        "accession": "P09211",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P09211",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ],
+    "11gs": [
+      {
+        "accession": "P09211",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P09211",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ],
+    "13gs": [
+      {
+        "accession": "P09211",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P09211",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ],
+    "16pk": [
+      {
+        "accession": "P07378",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "184l": [
+      {
+        "accession": "P00720",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "185l": [
+      {
+        "accession": "P00720",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "186l": [
+      {
+        "accession": "P00720",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "187l": [
+      {
+        "accession": "P00720",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "188l": [
+      {
+        "accession": "P00720",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "1a07": [
+      {
+        "accession": "P12931",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P12931",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "C"
+      }
+    ],
+    "1a08": [
+      {
+        "accession": "P12931",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P12931",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "C"
+      }
+    ],
+    "1a09": [
+      {
+        "accession": "P12931",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P12931",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "C"
+      }
+    ],
+    "1a0q": [
+      {
+        "accession": "P01869",
+        "chain_id": "H",
+        "entity_id": "2",
+        "struct_asym_id": "B"
+      },
+      {
+        "accession": "P01837",
+        "chain_id": "L",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      }
+    ],
+    "1a0t": [
+      {
+        "accession": "P22340",
+        "chain_id": "P",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P22340",
+        "chain_id": "Q",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      },
+      {
+        "accession": "P22340",
+        "chain_id": "R",
+        "entity_id": "1",
+        "struct_asym_id": "C"
+      }
+    ],
+    "1a1b": [
+      {
+        "accession": "P12931",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P12931",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "C"
+      }
+    ],
+    "1a1c": [
+      {
+        "accession": "P12931",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P12931",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ],
+    "1a1e": [
+      {
+        "accession": "P12931",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P12931",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ],
+    "1a28": [
+      {
+        "accession": "P06401",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P06401",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ],
+    "1a2c": [
+      {
+        "accession": "P00734",
+        "chain_id": "H",
+        "entity_id": "2",
+        "struct_asym_id": "B"
+      },
+      {
+        "accession": "P00734",
+        "chain_id": "L",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P09945",
+        "chain_id": "I",
+        "entity_id": "3",
+        "struct_asym_id": "C"
+      }
+    ],
+    "1a30": [
+      {
+        "accession": "P04585",
+        "chain_id": "A",
+        "entity_id": "1",
+        "struct_asym_id": "A"
+      },
+      {
+        "accession": "P04585",
+        "chain_id": "B",
+        "entity_id": "1",
+        "struct_asym_id": "B"
+      }
+    ]
+  },
+  "pubchem_cid_by_inchikey": {
+    "BCGQSBZQJMLGTC-GOTSBHOMSA-N": 5326405,
+    "CTQNGGLPUBDAKN-UHFFFAOYSA-N": 7237,
+    "CZMRCDWAGMRECN-UGDNZRGBSA-N": 5988,
+    "FJQWWGCHPFSERW-CQSZACIVSA-N": 444107,
+    "IKUNLBZZXQAOEH-GOTSBHOMSA-N": 444100,
+    "JVSBYEDSSRZQGV-GUBZILKMSA-O": null,
+    "JXPMSVJLAROPAI-GOTSBHOMSA-N": 444101,
+    "KXUHSQYYJYAXGZ-UHFFFAOYSA-N": 10870,
+    "LMADZBIAOYLZDD-GOTSBHOMSA-N": 444112,
+    "LYGDXUXRWFVLNH-HJNYFJLDSA-N": 444114,
+    "NCEXYHBECQHGNR-QZQOTICOSA-N": null,
+    "OCKPCBLVNKHBMX-UHFFFAOYSA-N": 7705,
+    "RJKFOVLPORLFTN-LEKSSAKUSA-N": 5994,
+    "SIKJAQJRHWYJAI-UHFFFAOYSA-N": 798,
+    "URLKBWYHVLBVBO-UHFFFAOYSA-N": 7809,
+    "VWQBAZQMKBHYJA-QYVSTXNMSA-N": 444076,
+    "XJTHIRMZZQABBU-UBHSHLNASA-O": null,
+    "XNDVCNQEUAIBID-VXKWHMMOSA-N": 444113,
+    "ZPSKWMFLCHMEOY-CMKODMSKSA-O": null,
+    "ZRJNSRDWYFDFAT-OUZOMVJXSA-N": 444122
+  }
+}
