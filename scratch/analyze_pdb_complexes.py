@@ -330,6 +330,19 @@ def extract_ligand_identity(
         smiles = _mol_to_smiles(mol)
         inchikey = _mol_to_inchikey(mol)
 
+    if inchikey is None and ligand_mol2 is not None and not parse_status.startswith(
+        "ok:mol2"
+    ):
+        mol2_mol, mol2_status = _load_ligand_mol(None, ligand_mol2)
+        if mol2_mol is not None:
+            mol2_smiles = _mol_to_smiles(mol2_mol)
+            mol2_inchikey = _mol_to_inchikey(mol2_mol)
+            if mol2_inchikey is not None:
+                mol = mol2_mol
+                smiles = mol2_smiles
+                inchikey = mol2_inchikey
+                parse_status = f"{mol2_status}_after_sdf_no_inchikey"
+
     ligand, ligand_id_source = _choose_ligand_id(
         pdb_id=pdb_id,
         inchikey=inchikey,
