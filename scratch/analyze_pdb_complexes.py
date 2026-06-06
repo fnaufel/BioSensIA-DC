@@ -116,7 +116,8 @@ class MetadataFetchError(RuntimeError):
 def build_complexes_frame(
     combine_set_dir: str | Path = DEFAULT_COMBINE_SET_DIR,
     *,
-    online: bool = True,
+    online_pocket: bool = True,
+    online_ligand: bool = False,
     cache_path: str | Path | None = DEFAULT_CACHE_PATH,
     limit: int | None = None,
     timeout_seconds: float = 30,
@@ -130,12 +131,15 @@ def build_complexes_frame(
     ----------
     combine_set_dir:
         Directory containing one subdirectory per PDB complex.
-    online:
-        Fetch UniProt/PubChem/ChEMBL annotations from PDBe, PubChem, and ChEMBL.
-        If false, only cached online metadata is used; missing pocket IDs fall
-        back to sequence hashes, and missing ligand database IDs remain null.
+    online_pocket:
+        Fetch missing UniProt annotations from PDBe SIFTS to build pocket IDs.
+        If false, skip SIFTS metadata and fall back to sequence hashes.
+    online_ligand:
+        Fetch missing PubChem/ChEMBL annotations for ligands. If false, skip
+        PubChem/ChEMBL metadata and leave those IDs null.
     cache_path:
-        JSON cache for online metadata. Set to ``None`` to disable caching.
+        JSON cache for enabled online metadata lookups. Set to ``None`` to
+        disable caching.
     limit:
         Optional number of complexes to process, useful for smoke tests.
     timeout_seconds:
@@ -169,7 +173,8 @@ def build_complexes_frame(
         rows.append(
             analyze_complex(
                 complex_dir,
-                online=online,
+                online_pocket=online_pocket,
+                online_ligand=online_ligand,
                 cache=cache,
                 timeout_seconds=timeout_seconds,
                 sleep_seconds=sleep_seconds,
@@ -184,7 +189,8 @@ def build_complexes_frame(
 def analyze_complex(
     complex_dir: str | Path,
     *,
-    online: bool,
+    online_pocket: bool,
+    online_ligand: bool,
     cache: dict[str, Any],
     timeout_seconds: float,
     sleep_seconds: float,
@@ -200,7 +206,7 @@ def analyze_complex(
         pdb_id,
         protein_pdb=files["protein_pdb"],
         pocket_pdb=files["pocket_pdb"],
-        online=online,
+        online=online_pocket,
         cache=cache,
         timeout_seconds=timeout_seconds,
         sleep_seconds=sleep_seconds,
@@ -210,7 +216,7 @@ def analyze_complex(
         pdb_id,
         ligand_sdf=files["ligand_sdf"],
         ligand_mol2=files["ligand_mol2"],
-        online=online,
+        online=online_ligand,
         cache=cache,
         timeout_seconds=timeout_seconds,
         sleep_seconds=sleep_seconds,
@@ -456,11 +462,12 @@ def _get_pdb_uniprot_mappings(
     sleep_seconds: float,
 ) -> list[dict[str, str]]:
     pdb_id = pdb_id.lower()
+    if not online:
+        return []
+
     pdb_cache = cache.setdefault("pdb_uniprot_mappings", {})
     if pdb_id in pdb_cache:
         return pdb_cache[pdb_id] or []
-    if not online:
-        return []
 
     url = PD_BE_SIFTS_UNIPROT_URL.format(pdb_id=pdb_id)
     data = _get_json(url, timeout_seconds=timeout_seconds)
@@ -706,11 +713,12 @@ def _get_pubchem_cid(
     timeout_seconds: float,
     sleep_seconds: float,
 ) -> int | None:
+    if not online:
+        return None
+
     pubchem_cache = cache.setdefault("pubchem_cid_by_inchikey", {})
     if inchikey in pubchem_cache:
         return pubchem_cache[inchikey]
-    if not online:
-        return None
 
     url = PUBCHEM_CIDS_BY_INCHIKEY_URL.format(
         inchikey=urllib.parse.quote(inchikey, safe="")
@@ -733,11 +741,12 @@ def _get_chembl_id(
     timeout_seconds: float,
     sleep_seconds: float,
 ) -> str | None:
+    if not online:
+        return None
+
     chembl_cache = cache.setdefault("chembl_id_by_inchikey", {})
     if inchikey in chembl_cache:
         return chembl_cache[inchikey]
-    if not online:
-        return None
 
     query = urllib.parse.urlencode(
         {
@@ -829,11 +838,19 @@ def _parse_args() -> argparse.Namespace:
         help=f"Metadata cache path. Default: {DEFAULT_CACHE_PATH}",
     )
     parser.add_argument(
-        "--no-online",
+        "--no-online-pocket",
         action="store_true",
         help=(
-            "Do not fetch missing UniProt/PubChem/ChEMBL metadata. Cached values "
-            "are still used."
+            "Do not fetch UniProt metadata for pocket IDs; use sequence-hash "
+            "fallbacks instead."
+        ),
+    )
+    parser.add_argument(
+        "--online-ligand",
+        action="store_true",
+        help=(
+            "Fetch PubChem and ChEMBL ligand metadata. When off, those IDs stay "
+            "null."
         ),
     )
     parser.add_argument(
@@ -871,7 +888,8 @@ def main() -> None:
     args = _parse_args()
     df = build_complexes_frame(
         args.combine_set_dir,
-        online=not args.no_online,
+        online_pocket=not args.no_online_pocket,
+        online_ligand=args.online_ligand,
         cache_path=args.cache_path,
         limit=args.limit,
         timeout_seconds=args.timeout_seconds,
