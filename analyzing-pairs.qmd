@@ -1,0 +1,91 @@
+---
+title: Análise dos pares *pocket*-ligando para treinamento do BioSensIA-DC
+author: "Fernando Náufel"
+date: now
+date-format: "DD/MM/YYYY HH:mm"
+lang: pt
+engine: knitr
+execute: 
+  echo: true
+  eval: true
+  warning: true
+  error: true
+  include: true
+
+# bibliography: bibliography.bib
+
+# Português:
+# csl: universidade-do-porto-faculdade-de-engenharia-chicago-pt-crono.csl
+
+format:
+  html:
+    toc: true  
+    toc-depth: 3
+    number-sections: true
+    number-depth: 3
+    theme: 
+      - journal
+      - _custom.scss
+#    link-external-icon: true
+    link-external-newwindow: true
+    link-external-filter: ^(?:http:|https:)\/\/fnaufel\.github\.io
+    df-print: paged
+    code-link: true
+    code-copy: true
+    code-tools: true
+    self-contained: true
+---
+
+
+# Objetivo
+
+???
+
+
+# Leitura dos dados
+
+```{r setup}
+library(jsonlite)
+library(tidyverse)
+```
+
+```{r}
+df = fromJSON(
+  'scratch/2026-06-06-pairs-fixed.json',
+  flatten = TRUE
+)
+```
+
+```{r}
+df %>% glimpse()
+```
+
+```{r}
+df %>% 
+  count(ligand, sort = TRUE) %>% 
+  filter(n >= 2)
+```
+
+```{r}
+df %>% 
+  count(ligand, sort = TRUE)
+```
+
+```{r}
+df %>% 
+  count(ligand) %>% 
+  filter(n > 1, n <= 10) %>% 
+  ggplot() +
+  geom_bar(
+    aes(x = n)
+  ) +
+  scale_x_continuous(breaks = seq(1, 10, 1)) +
+  scale_y_continuous(breaks = seq(0, 1200, 100))
+```
+
+```{r}
+df %>% 
+  count(ligand, sort = TRUE) %>% 
+  count(n >= 2)
+```
+
