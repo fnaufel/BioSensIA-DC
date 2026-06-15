@@ -376,8 +376,8 @@ them and organize them like so:
                           ├── pocket_pre_220816.pt
                           └── ...
 
-The file `train.lmdb` exists in two archives: `pdbbind_only.zip` and
-`pdbbind_2020_combineset.zip`. Use the latter.
+The files `train.lmdb` and `valid.lmdb` exist in two archives:
+`pdbbind_only.zip` and `train_no_test_af.zip`. Use the latter.
 
 ### Make the script files executable
 
