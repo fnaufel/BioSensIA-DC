@@ -1,7 +1,9 @@
-"""Utilities for preparing and reading DrugCLIP target-fishing data."""
+"""Utilities for preparing, running, and reading DrugCLIP target fishing."""
 
 from __future__ import annotations
 
+import argparse
+import logging
 import os
 import pickle
 import re
@@ -33,13 +35,21 @@ from biosensia_retrieval import (
 from lmdb_helpers import write_lmdb_records
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 DEFAULT_CANDIDATE_POCKETS_LMDB = Path("data/candidate_pockets.lmdb")
+DEFAULT_QUERY_MOL_LMDB = Path("data/query_mol.lmdb")
+DEFAULT_DRUGCLIP_DIR = Path("external/DrugCLIP")
+DEFAULT_DRUGCLIP_DATA_DIR = DEFAULT_DRUGCLIP_DIR / "data"
+DEFAULT_DRUGCLIP_CHECKPOINT = DEFAULT_DRUGCLIP_DIR / "checkpoint_best.pt"
 DEFAULT_DRUGCLIP_MOLS_LMDB = Path("external/DrugCLIP/mols.lmdb")
 DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB = Path("data/mols_index.lmdb")
 DEFAULT_MOL_DOWNLOAD_DIR = Path("data/molecules")
 DEFAULT_RANKED_POCKETS_PATH = Path(
     "external/DrugCLIP/data/pocket_emb/ranked_pockets.txt"
 )
+DEFAULT_TARGET_FISHING_TOP_K = 1000
 RCSB_PDB_STRUCTURE_URL_PREFIX = "https://www.rcsb.org/structure/"
 PUBCHEM_SDF_URL = (
     "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/"
@@ -550,6 +560,358 @@ def build_ranked_pockets_frame(
                 pl.col("pocket").str.to_uppercase(),
             ]
         ).alias("pdb_url")
+    )
+
+
+def build_drugclip_target_fishing_args(
+    *,
+    drugclip_dir: str | Path = DEFAULT_DRUGCLIP_DIR,
+    data_dir: str | Path | None = None,
+    checkpoint_path: str | Path | None = None,
+    mol_path: str | Path = DEFAULT_QUERY_MOL_LMDB,
+    pocket_path: str | Path = DEFAULT_CANDIDATE_POCKETS_LMDB,
+    emb_dir: str | Path | None = None,
+    results_path: str | Path | None = None,
+    top_k: int = DEFAULT_TARGET_FISHING_TOP_K,
+    batch_size: int = 2,
+    batch_size_valid: int = 2,
+    num_workers: int = 8,
+    seed: int = 1,
+    fp16: bool = True,
+    cpu: bool = False,
+):
+    """Create the Uni-Core args object used by DrugCLIP target fishing.
+
+    The registered Uni-Core task remains DrugCLIP's ``drugclip`` task. This
+    helper only builds an argument namespace from repository-root paths so the
+    target-fishing entry point can live in BioSensIA-DC instead of inside
+    ``external/DrugCLIP``.
+    """
+
+    if top_k <= 0:
+        raise ValueError("top_k must be greater than 0")
+
+    from unicore import options, utils
+
+    drugclip_dir = Path(drugclip_dir).resolve()
+    user_dir = drugclip_dir / "unimol"
+    data_dir = Path(data_dir).resolve() if data_dir else drugclip_dir / "data"
+    checkpoint_path = (
+        Path(checkpoint_path).resolve()
+        if checkpoint_path
+        else drugclip_dir / "checkpoint_best.pt"
+    )
+    mol_path = Path(mol_path).resolve()
+    pocket_path = Path(pocket_path).resolve()
+    emb_dir = (
+        Path(emb_dir).resolve()
+        if emb_dir
+        else drugclip_dir / "data" / "pocket_emb"
+    )
+    results_path = (
+        Path(results_path).resolve() if results_path else drugclip_dir / "test"
+    )
+
+    # Import DrugCLIP's custom task/model/loss registrations before parsing
+    # ``--task drugclip`` and ``--arch drugclip``.
+    utils.import_user_module(argparse.Namespace(user_dir=str(user_dir)))
+
+    parser = options.get_validation_parser()
+    parser.add_argument(
+        "--mol-path",
+        type=str,
+        default="",
+        help="path for query molecule data",
+    )
+    parser.add_argument(
+        "--pocket-path",
+        type=str,
+        default="",
+        help="path for candidate pocket data",
+    )
+    parser.add_argument(
+        "--emb-dir",
+        type=str,
+        default="",
+        help="path for saved candidate-pocket embedding data",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_TARGET_FISHING_TOP_K,
+        help="number of top-ranked pockets to write",
+    )
+    options.add_model_args(parser)
+
+    input_args = [
+        str(data_dir),
+        "--arch",
+        "drugclip",
+        "--batch-size",
+        str(batch_size),
+        "--batch-size-valid",
+        str(batch_size_valid),
+        "--ddp-backend",
+        "c10d",
+        "--emb-dir",
+        str(emb_dir),
+        "--fp16-init-scale",
+        "4",
+        "--fp16-scale-window",
+        "256",
+        "--log-format",
+        "simple",
+        "--log-interval",
+        "100",
+        "--loss",
+        "in_batch_softmax",
+        "--max-pocket-atoms",
+        "256",
+        "--mol-path",
+        str(mol_path),
+        "--num-workers",
+        str(num_workers),
+        "--path",
+        str(checkpoint_path),
+        "--pocket-path",
+        str(pocket_path),
+        "--results-path",
+        str(results_path),
+        "--seed",
+        str(seed),
+        "--task",
+        "drugclip",
+        "--top-k",
+        str(top_k),
+        "--user-dir",
+        str(user_dir),
+        "--valid-subset",
+        "test",
+    ]
+    if fp16:
+        input_args.append("--fp16")
+    if cpu:
+        input_args.append("--cpu")
+
+    return options.parse_args_and_arch(parser, input_args=input_args)
+
+
+def retrieve_pockets_from_drugclip(args) -> tuple[list[str], np.ndarray]:
+    """Load DrugCLIP and return ``task.retrieve_pockets`` names and scores."""
+
+    import torch
+    from unicore import checkpoint_utils, tasks
+
+    use_fp16 = args.fp16
+    use_cuda = torch.cuda.is_available() and not args.cpu
+
+    if use_cuda:
+        torch.cuda.set_device(args.device_id)
+    else:
+        LOGGER.warning(
+            "CUDA is not available or --cpu was set. DrugCLIP target fishing "
+            "may fail because DrugCLIP's encoder path moves batches to CUDA."
+        )
+
+    LOGGER.info("loading model(s) from %s", args.path)
+    state = checkpoint_utils.load_checkpoint_to_cpu(args.path)
+    task = tasks.setup_task(args)
+    model = task.build_model(args)
+    model.load_state_dict(state["model"], strict=False)
+
+    if use_fp16:
+        model.half()
+    if use_cuda:
+        model.cuda()
+
+    model.eval()
+    return task.retrieve_pockets(
+        model,
+        args.mol_path,
+        args.pocket_path,
+        args.emb_dir,
+        args.top_k,
+    )
+
+
+def write_ranked_pockets(
+    names: Iterable[str],
+    scores: Iterable[float],
+    output_path: str | Path = DEFAULT_RANKED_POCKETS_PATH,
+) -> Path:
+    """Write target-fishing pocket scores as DrugCLIP-compatible TSV."""
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for name, score in zip(names, scores):
+            handle.write(f"{name}\t{score}\n")
+    return output_path
+
+
+def target_fishing_main(args, *, output_path: str | Path | None = None) -> Path:
+    """Run target fishing from a parsed Uni-Core argument namespace."""
+
+    if args.top_k <= 0:
+        raise ValueError("--top-k must be greater than 0")
+
+    names, scores = retrieve_pockets_from_drugclip(args)
+    ranked_pockets_path = (
+        Path(output_path)
+        if output_path is not None
+        else Path(args.emb_dir) / "ranked_pockets.txt"
+    )
+    ranked_pockets_path = write_ranked_pockets(names, scores, ranked_pockets_path)
+    LOGGER.info("wrote ranked pockets to %s", ranked_pockets_path)
+    return ranked_pockets_path
+
+
+def run_target_fishing(
+    *,
+    drugclip_dir: str | Path = DEFAULT_DRUGCLIP_DIR,
+    data_dir: str | Path | None = None,
+    checkpoint_path: str | Path | None = None,
+    mol_path: str | Path = DEFAULT_QUERY_MOL_LMDB,
+    pocket_path: str | Path = DEFAULT_CANDIDATE_POCKETS_LMDB,
+    emb_dir: str | Path | None = None,
+    results_path: str | Path | None = None,
+    output_path: str | Path | None = None,
+    top_k: int = DEFAULT_TARGET_FISHING_TOP_K,
+    batch_size: int = 2,
+    batch_size_valid: int = 2,
+    num_workers: int = 8,
+    seed: int = 1,
+    fp16: bool = True,
+    cpu: bool = False,
+) -> Path:
+    """Build Uni-Core args, run target fishing, and return the TSV path."""
+
+    args = build_drugclip_target_fishing_args(
+        drugclip_dir=drugclip_dir,
+        data_dir=data_dir,
+        checkpoint_path=checkpoint_path,
+        mol_path=mol_path,
+        pocket_path=pocket_path,
+        emb_dir=emb_dir,
+        results_path=results_path,
+        top_k=top_k,
+        batch_size=batch_size,
+        batch_size_valid=batch_size_valid,
+        num_workers=num_workers,
+        seed=seed,
+        fp16=fp16,
+        cpu=cpu,
+    )
+    return target_fishing_main(args, output_path=output_path)
+
+
+def _build_target_fishing_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run DrugCLIP target fishing from the BioSensIA-DC directory.",
+    )
+    parser.add_argument(
+        "--drugclip-dir",
+        type=Path,
+        default=DEFAULT_DRUGCLIP_DIR,
+        help="DrugCLIP checkout containing unimol/, data/, and checkpoint files.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="directory containing DrugCLIP dictionaries; defaults to DRUGCLIP_DIR/data.",
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        type=Path,
+        default=None,
+        help="DrugCLIP checkpoint; defaults to DRUGCLIP_DIR/checkpoint_best.pt.",
+    )
+    parser.add_argument(
+        "--mol-path",
+        type=Path,
+        default=DEFAULT_QUERY_MOL_LMDB,
+        help="query molecule LMDB.",
+    )
+    parser.add_argument(
+        "--pocket-path",
+        type=Path,
+        default=DEFAULT_CANDIDATE_POCKETS_LMDB,
+        help="candidate pocket LMDB.",
+    )
+    parser.add_argument(
+        "--emb-dir",
+        type=Path,
+        default=None,
+        help="candidate-pocket embedding cache directory; defaults to DRUGCLIP_DIR/data/pocket_emb.",
+    )
+    parser.add_argument(
+        "--results-path",
+        type=Path,
+        default=None,
+        help="Uni-Core results directory; defaults to DRUGCLIP_DIR/test.",
+    )
+    parser.add_argument(
+        "--output-path",
+        type=Path,
+        default=None,
+        help="ranked pockets TSV; defaults to EMB_DIR/ranked_pockets.txt.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_TARGET_FISHING_TOP_K,
+        help="number of top-ranked pockets to write.",
+    )
+    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--batch-size-valid", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument(
+        "--fp16",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="enable or disable fp16 inference.",
+    )
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        help="request CPU execution; DrugCLIP target fishing is normally GPU-only.",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("LOGLEVEL", "INFO"),
+        help="Python logging level.",
+    )
+    return parser
+
+
+def cli_main(argv: list[str] | None = None) -> Path:
+    """CLI entry point for ``python -m biosensia_target_fishing``."""
+
+    parser = _build_target_fishing_cli_parser()
+    args = parser.parse_args(argv)
+    logging.basicConfig(
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=str(args.log_level).upper(),
+    )
+    return run_target_fishing(
+        drugclip_dir=args.drugclip_dir,
+        data_dir=args.data_dir,
+        checkpoint_path=args.checkpoint_path,
+        mol_path=args.mol_path,
+        pocket_path=args.pocket_path,
+        emb_dir=args.emb_dir,
+        results_path=args.results_path,
+        output_path=args.output_path,
+        top_k=args.top_k,
+        batch_size=args.batch_size,
+        batch_size_valid=args.batch_size_valid,
+        num_workers=args.num_workers,
+        seed=args.seed,
+        fp16=args.fp16,
+        cpu=args.cpu,
     )
 
 
@@ -1232,13 +1594,28 @@ def _safe_molecule_slug(molecule: str) -> str:
 
 __all__ = [
     "DEFAULT_CANDIDATE_POCKETS_LMDB",
+    "DEFAULT_DRUGCLIP_CHECKPOINT",
+    "DEFAULT_DRUGCLIP_DATA_DIR",
+    "DEFAULT_DRUGCLIP_DIR",
     "DEFAULT_DRUGCLIP_MOLS_INDEX_LMDB",
     "DEFAULT_DRUGCLIP_MOLS_LMDB",
+    "DEFAULT_QUERY_MOL_LMDB",
     "DEFAULT_RANKED_POCKETS_PATH",
+    "DEFAULT_TARGET_FISHING_TOP_K",
     "RCSB_PDB_STRUCTURE_URL_PREFIX",
-    "build_mol_lmdb_index",
+    "build_drugclip_target_fishing_args",
     "build_candidate_pockets_frame",
     "build_candidate_pockets_lmdb",
+    "build_mol_lmdb_index",
     "build_ranked_pockets_frame",
+    "cli_main",
     "create_mol_lmdb",
+    "retrieve_pockets_from_drugclip",
+    "run_target_fishing",
+    "target_fishing_main",
+    "write_ranked_pockets",
 ]
+
+
+if __name__ == "__main__":
+    cli_main()

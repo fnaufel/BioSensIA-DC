@@ -31,27 +31,17 @@ if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
   export CUDA_VISIBLE_DEVICES="${GPU_ID:-0}"
 fi
 
-python ./unimol/target_fishing.py \
-       "$DATA_PATH" \
-       --arch drugclip \
+python ../../biosensia_target_fishing.py \
+       --drugclip-dir . \
+       --data-dir "$DATA_PATH" \
        --batch-size "$batch_size" \
        --batch-size-valid "$batch_size_valid" \
-       --ddp-backend c10d \
        --emb-dir "$EMB_DIR" \
        --fp16 \
-       --fp16-init-scale 4 \
-       --fp16-scale-window 256 \
-       --log-format simple \
-       --log-interval 100 \
-       --loss in_batch_softmax \
-       --max-pocket-atoms 256 \
        --mol-path "$MOL_PATH" \
        --num-workers 8 \
-       --path "$weight_path" \
+       --checkpoint-path "$weight_path" \
        --pocket-path "$POCKET_PATH" \
        --results-path "$results_path" \
        --seed 1 \
-       --task drugclip \
-       --top-k "$top_k" \
-       --user-dir ./unimol \
-       --valid-subset test
+       --top-k "$top_k"

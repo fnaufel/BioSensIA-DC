@@ -223,11 +223,14 @@ def _(mo):
     mo.md(r"""
     # Running the query
 
-    Change to the correct directory and run the bash script:
+    Run the BioSensIA target-fishing entry point from the repository root:
 
     ```bash
-    cd external/DrugCLIP/
-    ./target_fishing.sh
+    python -m biosensia_target_fishing \
+      --mol-path data/query_mol.lmdb \
+      --pocket-path data/candidate_pockets.lmdb \
+      --emb-dir external/DrugCLIP/data/pocket_emb \
+      --top-k 1000
     ```
 
     The first time the script is run, embeddings for all candidate pockets will be computed and saved to `external/DrugCLIP/data/pocket_emb/pockets_candidate_pockets.lmdb.pkl`. This will take a few minutes.
