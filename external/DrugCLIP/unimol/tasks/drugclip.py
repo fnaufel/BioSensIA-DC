@@ -1399,7 +1399,8 @@ class DrugCLIP(UnicoreTask):
 
         Unlike ``retrieve_pockets``, this method does not aggregate multiple
         query molecules. It returns one ranked pocket list and score list for
-        each molecule, which is the shape needed for target-fishing benchmarks.
+        each molecule, which is the shape needed for BioSensIA held-out
+        target-fishing evaluations.
         """
 
         if k <= 0:
