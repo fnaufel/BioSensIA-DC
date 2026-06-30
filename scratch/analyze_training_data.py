@@ -42,7 +42,7 @@ DEFAULT_LMDB_PATHS = {
     "valid": Path("external/DrugCLIP/data/valid.lmdb"),
 }
 DEFAULT_COMBINE_SET_DIR = Path("external/DrugCLIP/data/pdb/combine_set")
-DEFAULT_OUTPUT_PATH = Path("scratch/training_data_pairs.parquet")
+DEFAULT_OUTPUT_PATH = Path("data/biosensia_finetune/training_data_pairs.parquet")
 DEFAULT_CACHE_PATH = Path("scratch/training_data_metadata_cache.json")
 
 PD_BE_SIFTS_UNIPROT_URL = (

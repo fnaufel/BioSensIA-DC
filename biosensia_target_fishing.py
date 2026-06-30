@@ -699,6 +699,34 @@ def build_drugclip_target_fishing_args(
 def retrieve_pockets_from_drugclip(args) -> tuple[list[str], np.ndarray]:
     """Load DrugCLIP and return ``task.retrieve_pockets`` names and scores."""
 
+    task, model = load_drugclip_model_for_target_fishing(args)
+    return task.retrieve_pockets(
+        model,
+        args.mol_path,
+        args.pocket_path,
+        args.emb_dir,
+        args.top_k,
+    )
+
+
+def retrieve_pocket_rankings_from_drugclip(
+    args,
+) -> tuple[dict[str, list[str]], dict[str, np.ndarray]]:
+    """Load DrugCLIP and return one pocket ranking per query molecule."""
+
+    task, model = load_drugclip_model_for_target_fishing(args)
+    return task.rank_pockets_by_query(
+        model,
+        args.mol_path,
+        args.pocket_path,
+        args.emb_dir,
+        args.top_k,
+    )
+
+
+def load_drugclip_model_for_target_fishing(args):
+    """Load a DrugCLIP checkpoint and return ``(task, model)`` for inference."""
+
     import torch
     from unicore import checkpoint_utils, tasks
 
@@ -725,13 +753,7 @@ def retrieve_pockets_from_drugclip(args) -> tuple[list[str], np.ndarray]:
         model.cuda()
 
     model.eval()
-    return task.retrieve_pockets(
-        model,
-        args.mol_path,
-        args.pocket_path,
-        args.emb_dir,
-        args.top_k,
-    )
+    return task, model
 
 
 def write_ranked_pockets(
@@ -1610,6 +1632,8 @@ __all__ = [
     "build_ranked_pockets_frame",
     "cli_main",
     "create_mol_lmdb",
+    "load_drugclip_model_for_target_fishing",
+    "retrieve_pocket_rankings_from_drugclip",
     "retrieve_pockets_from_drugclip",
     "run_target_fishing",
     "target_fishing_main",

@@ -4,6 +4,8 @@
 from IPython import embed as debug_embedded
 import logging
 import os
+import hashlib
+from collections import defaultdict
 from collections.abc import Iterable
 from sklearn.metrics import roc_auc_score
 from xmlrpc.client import Boolean
@@ -13,7 +15,7 @@ import pickle
 from tqdm import tqdm
 from unicore import checkpoint_utils
 import unicore
-from unicore.data import (AppendTokenDataset, Dictionary, EpochShuffleDataset,
+from unicore.data import (AppendTokenDataset, BaseWrapperDataset, Dictionary, EpochShuffleDataset,
                           FromNumpyDataset, NestedDictionaryDataset,
                           PrependTokenDataset, RawArrayDataset,LMDBDataset, RawLabelDataset,
                           RightPadDataset, RightPadDataset2D, TokenizeDataset,SortDataset,data_utils)
@@ -29,6 +31,121 @@ from unimol.data import (AffinityDataset, CroppingPocketDataset,
 from rdkit.ML.Scoring.Scoring import CalcBEDROC, CalcAUC, CalcEnrichment
 from sklearn.metrics import roc_curve
 logger = logging.getLogger(__name__)
+
+
+class LigandCenteredBatchDataset(BaseWrapperDataset):
+    def __init__(self, dataset, ligand_keys, positives_per_ligand=2, seed=1):
+        super().__init__(dataset)
+        if positives_per_ligand <= 0:
+            raise ValueError("positives_per_ligand must be greater than 0")
+        if len(ligand_keys) != len(dataset):
+            raise ValueError("ligand_keys length must match dataset length")
+        self.ligand_keys = np.asarray(ligand_keys, dtype=object)
+        self.positives_per_ligand = int(positives_per_ligand)
+        self.seed = int(seed)
+        self.epoch = 1
+        self._groups = defaultdict(list)
+        for index, ligand_key in enumerate(self.ligand_keys):
+            self._groups[str(ligand_key)].append(index)
+
+    @property
+    def can_reuse_epoch_itr_across_epochs(self):
+        return False
+
+    def set_epoch(self, epoch):
+        super().set_epoch(epoch)
+        self.epoch = 1 if epoch is None else int(epoch)
+
+    def ordered_indices(self):
+        return np.arange(len(self), dtype=np.int64)
+
+    def batch_by_size(
+        self,
+        indices,
+        batch_size=None,
+        required_batch_size_multiple=1,
+    ):
+        batch_size = int(batch_size if batch_size is not None else 1)
+        if batch_size <= 0:
+            raise ValueError("batch_size must be greater than 0")
+
+        rng = np.random.RandomState([1776, self.seed % (2**32), self.epoch])
+        queues = {}
+        for ligand_key, group_indices in self._groups.items():
+            shuffled = np.asarray(group_indices, dtype=np.int64).copy()
+            rng.shuffle(shuffled)
+            queues[ligand_key] = list(shuffled)
+
+        batches = []
+        while queues:
+            ligand_keys = list(queues)
+            rng.shuffle(ligand_keys)
+            batch = []
+            for ligand_key in ligand_keys:
+                if len(batch) >= batch_size:
+                    break
+                queue = queues[ligand_key]
+                take = min(
+                    self.positives_per_ligand,
+                    batch_size - len(batch),
+                    len(queue),
+                )
+                for _ in range(take):
+                    batch.append(queue.pop())
+                if not queue:
+                    del queues[ligand_key]
+            if batch:
+                batches.append(np.asarray(batch, dtype=np.int64))
+
+        return batches
+
+
+def _record_key(record, key, fallback_key):
+    value = record.get(key)
+    if value is None or value == "":
+        value = record.get(fallback_key)
+    return str(value)
+
+
+def _set_trainable_params(model, policy):
+    if policy == "all":
+        for _, parameter in model.named_parameters():
+            parameter.requires_grad = True
+        return
+
+    trainable_prefixes = ("mol_project.", "pocket_project.")
+    trainable_names = set()
+    if policy == "projection-and-logit-scale":
+        trainable_names.add("logit_scale")
+
+    for name, parameter in model.named_parameters():
+        parameter.requires_grad = (
+            name.startswith(trainable_prefixes) or name in trainable_names
+        )
+
+
+def _parameter_count(model, only_trainable=False):
+    return sum(
+        parameter.numel()
+        for parameter in model.parameters()
+        if not only_trainable or parameter.requires_grad
+    )
+
+
+def _checkpoint_cache_tag(checkpoint_path):
+    if not checkpoint_path:
+        return "no_checkpoint"
+    if isinstance(checkpoint_path, (list, tuple)):
+        checkpoint_path = checkpoint_path[0] if checkpoint_path else None
+    if not checkpoint_path:
+        return "no_checkpoint"
+    checkpoint_path = os.path.abspath(str(checkpoint_path))
+    if os.path.exists(checkpoint_path):
+        stat = os.stat(checkpoint_path)
+        payload = f"{checkpoint_path}:{stat.st_size}:{stat.st_mtime_ns}"
+    else:
+        payload = checkpoint_path
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
 
 
 def re_new(y_true, y_score, ratio):
@@ -155,6 +272,24 @@ class DrugCLIP(UnicoreTask):
             help="whether test model",
         )
         parser.add_argument("--reg", action="store_true", help="regression task")
+        parser.add_argument(
+            "--trainable-params",
+            choices=["all", "projection", "projection-and-logit-scale"],
+            default="all",
+            help="which DrugCLIP parameters remain trainable during fine-tuning",
+        )
+        parser.add_argument(
+            "--biosensia-batch-sampler",
+            choices=["random", "ligand"],
+            default="random",
+            help="training sampler; ligand groups repeated ligands within batches",
+        )
+        parser.add_argument(
+            "--biosensia-positives-per-ligand",
+            type=int,
+            default=2,
+            help="maximum examples sampled per ligand when using ligand batching",
+        )
 
     def __init__(self, args, dictionary, pocket_dictionary):
         super().__init__(args)
@@ -166,6 +301,8 @@ class DrugCLIP(UnicoreTask):
         self.pocket_mask_idx = pocket_dictionary.add_symbol("[MASK]", is_special=True)
         self.mol_reps = None
         self.keys = None
+        self.positive_pockets_by_ligand = defaultdict(set)
+        self.positive_pockets_by_ligand_by_split = {}
 
     @classmethod
     def setup_task(cls, args, **kwargs):
@@ -182,11 +319,29 @@ class DrugCLIP(UnicoreTask):
             split (str): name of the data scoure (e.g., bppp)
         """
         data_path = os.path.join(self.args.data, split + ".lmdb")
-        dataset = LMDBDataset(data_path)
+        raw_dataset = LMDBDataset(data_path)
+        ligand_keys = [
+            _record_key(raw_dataset[index], "ligand_key", "smi")
+            for index in range(len(raw_dataset))
+        ]
+        pocket_keys = [
+            _record_key(raw_dataset[index], "pocket_key", "pocket")
+            for index in range(len(raw_dataset))
+        ]
+        split_positive_pockets_by_ligand = defaultdict(set)
+        for ligand_key, pocket_key in zip(ligand_keys, pocket_keys):
+            self.positive_pockets_by_ligand[ligand_key].add(pocket_key)
+            split_positive_pockets_by_ligand[ligand_key].add(pocket_key)
+        self.positive_pockets_by_ligand_by_split[split] = split_positive_pockets_by_ligand
+
+        smi_dataset = KeyDataset(raw_dataset, "smi")
+        poc_dataset = KeyDataset(raw_dataset, "pocket")
+        ligand_key_dataset = ligand_keys
+        pocket_key_dataset = pocket_keys
+        split_dataset = [split] * len(raw_dataset)
+
+        dataset = raw_dataset
         if split.startswith("train"):
-            smi_dataset = KeyDataset(dataset, "smi")
-            poc_dataset = KeyDataset(dataset, "pocket")
-            
             dataset = AffinityDataset(
                 dataset,
                 self.args.seed,
@@ -211,8 +366,6 @@ class DrugCLIP(UnicoreTask):
                 "label",
             )
             tgt_dataset = KeyDataset(dataset, "affinity")
-            smi_dataset = KeyDataset(dataset, "smi")
-            poc_dataset = KeyDataset(dataset, "pocket")
 
 
         def PrependAndAppend(dataset, pre_token, app_token):
@@ -317,9 +470,19 @@ class DrugCLIP(UnicoreTask):
                 },
                 "smi_name": RawArrayDataset(smi_dataset),
                 "pocket_name": RawArrayDataset(poc_dataset),
+                "ligand_key": RawArrayDataset(ligand_key_dataset),
+                "pocket_key": RawArrayDataset(pocket_key_dataset),
+                "split": RawArrayDataset(split_dataset),
             },
         )
-        if split == "train":
+        if split == "train" and self.args.biosensia_batch_sampler == "ligand":
+            self.datasets[split] = LigandCenteredBatchDataset(
+                nest_dataset,
+                ligand_keys,
+                positives_per_ligand=self.args.biosensia_positives_per_ligand,
+                seed=self.args.seed,
+            )
+        elif split == "train":
             with data_utils.numpy_seed(self.args.seed):
                 shuffle = np.random.permutation(len(src_dataset))
 
@@ -572,6 +735,14 @@ class DrugCLIP(UnicoreTask):
                 args.finetune_pocket_model,
             )
             model.pocket_model.load_state_dict(state["model"], strict=False)
+
+        _set_trainable_params(model, args.trainable_params)
+        logger.info(
+            "trainable parameter policy: %s (%d / %d parameters trainable)",
+            args.trainable_params,
+            _parameter_count(model, only_trainable=True),
+            _parameter_count(model, only_trainable=False),
+        )
 
         return model
 
@@ -1023,9 +1194,14 @@ class DrugCLIP(UnicoreTask):
         """
 
         os.makedirs(emb_dir, exist_ok=True)
+        checkpoint_tag = _checkpoint_cache_tag(getattr(self.args, "path", None))
         cache_path = os.path.join(
             emb_dir,
-            "pockets_" + os.path.basename(str(data_path)) + ".pkl",
+            "pockets_"
+            + os.path.basename(str(data_path))
+            + "."
+            + checkpoint_tag
+            + ".pkl",
         )
 
         if os.path.exists(cache_path):
@@ -1212,6 +1388,40 @@ class DrugCLIP(UnicoreTask):
         top_k = np.argsort(res)[::-1][:k]
 
         return [pocket_names[i] for i in top_k], res[top_k]
+
+    def rank_pockets_by_query(self, model, mol_path, pocket_path, emb_dir, k, **kwargs):
+        """Return per-query target-fishing pocket rankings.
+
+        Unlike ``retrieve_pockets``, this method does not aggregate multiple
+        query molecules. It returns one ranked pocket list and score list for
+        each molecule, which is the shape needed for target-fishing benchmarks.
+        """
+
+        if k <= 0:
+            raise ValueError("k must be greater than 0")
+
+        os.makedirs(emb_dir, exist_ok=True)
+        pocket_reps, pocket_names = self.encode_pockets_once(
+            model,
+            pocket_path,
+            emb_dir,
+        )
+        mol_reps, mol_names = self.encode_query_mols(
+            model,
+            mol_path,
+            "atoms",
+            "coordinates",
+        )
+
+        scores = mol_reps @ pocket_reps.T
+        rankings = {}
+        ranking_scores = {}
+        for mol_index, mol_name in enumerate(mol_names):
+            top_k = np.argsort(scores[mol_index])[::-1][:k]
+            rankings[mol_name] = [pocket_names[pocket_index] for pocket_index in top_k]
+            ranking_scores[mol_name] = scores[mol_index, top_k]
+
+        return rankings, ranking_scores
 
 
         

@@ -668,6 +668,264 @@ class IBSLoss(CrossEntropyLoss):
 
 
 
+@register_loss("biosensia_multi_positive")
+class BioSensIAMultiPositiveLoss(CrossEntropyLoss):
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument(
+            "--biosensia-lambda-mol-to-pocket",
+            type=float,
+            default=1.0,
+            help="weight for the target-fishing mol-to-pocket loss term",
+        )
+        parser.add_argument(
+            "--biosensia-lambda-pocket-to-mol",
+            type=float,
+            default=0.0,
+            help="weight for the optional symmetric pocket-to-mol loss term",
+        )
+        parser.add_argument(
+            "--biosensia-temperature",
+            type=float,
+            default=1.0 / 14.0,
+            help="softmax temperature applied to cosine similarities",
+        )
+        parser.add_argument(
+            "--biosensia-metric-top-k",
+            type=str,
+            default="1,3,5",
+            help="comma-separated top-k values logged for batch retrieval metrics",
+        )
+
+    def __init__(self, task):
+        super().__init__(task)
+        if self.args.biosensia_lambda_mol_to_pocket < 0:
+            raise ValueError("--biosensia-lambda-mol-to-pocket must be non-negative")
+        if self.args.biosensia_lambda_pocket_to_mol < 0:
+            raise ValueError("--biosensia-lambda-pocket-to-mol must be non-negative")
+        if self.args.biosensia_temperature <= 0:
+            raise ValueError("--biosensia-temperature must be greater than 0")
+        self.metric_top_k = tuple(
+            sorted(
+                {
+                    int(item)
+                    for item in str(self.args.biosensia_metric_top_k).split(",")
+                    if item.strip()
+                }
+            )
+        )
+        if not self.metric_top_k:
+            self.metric_top_k = (1, 3, 5)
+
+    def forward(self, model, sample, reduce=True, fix_encoder=False):
+        net_output = model(
+            **sample["net_input"],
+            smi_list=sample["smi_name"],
+            pocket_list=sample["pocket_name"],
+            features_only=True,
+            fix_encoder=fix_encoder,
+            is_train=self.training,
+            mask_duplicate_pairs=False,
+            apply_logit_scale=False,
+        )
+
+        logits_pocket_to_mol = net_output[0].float() / self.args.biosensia_temperature
+        ligand_keys = _as_string_list(sample.get("ligand_key", sample["smi_name"]))
+        pocket_keys = _as_string_list(sample.get("pocket_key", sample["pocket_name"]))
+        positives_by_ligand = _positive_lookup_for_sample(self.task, sample)
+        positive_mol_to_pocket = _build_positive_mask(
+            ligand_keys,
+            pocket_keys,
+            positives_by_ligand,
+            logits_pocket_to_mol.device,
+        )
+
+        logits_mol_to_pocket = torch.transpose(logits_pocket_to_mol, 0, 1)
+        loss_mol, mol_queries = _multi_positive_direction_loss(
+            logits_mol_to_pocket,
+            positive_mol_to_pocket,
+            reduce=reduce,
+        )
+        loss_pocket, pocket_queries = _multi_positive_direction_loss(
+            logits_pocket_to_mol,
+            torch.transpose(positive_mol_to_pocket, 0, 1),
+            reduce=reduce,
+        )
+        loss = (
+            self.args.biosensia_lambda_mol_to_pocket * loss_mol
+            + self.args.biosensia_lambda_pocket_to_mol * loss_pocket
+        )
+        sample_size = int(mol_queries.item())
+
+        metric_values = _ranking_metric_sums(
+            logits_mol_to_pocket.detach(),
+            positive_mol_to_pocket,
+            self.metric_top_k,
+        )
+        logging_output = {
+            "loss": loss.data,
+            "loss_mol_to_pocket": loss_mol.data,
+            "loss_pocket_to_mol": loss_pocket.data,
+            "sample_size": sample_size,
+            "bsz": logits_pocket_to_mol.size(0),
+            "mol_queries": mol_queries.data,
+            "pocket_queries": pocket_queries.data,
+            "m2p_mrr_sum": metric_values["mrr_sum"],
+            "m2p_query_count": metric_values["query_count"],
+        }
+        for top_k, hits in metric_values["hits_at_k"].items():
+            logging_output[f"m2p_top{top_k}_hits"] = hits
+        return loss, sample_size, logging_output
+
+    @staticmethod
+    def reduce_metrics(logging_outputs, split="valid") -> None:
+        loss_sum = sum(log.get("loss", 0) for log in logging_outputs)
+        mol_loss_sum = sum(log.get("loss_mol_to_pocket", 0) for log in logging_outputs)
+        pocket_loss_sum = sum(log.get("loss_pocket_to_mol", 0) for log in logging_outputs)
+        sample_size = sum(log.get("sample_size", 0) for log in logging_outputs)
+        query_count = sum(log.get("m2p_query_count", 0) for log in logging_outputs)
+        if sample_size == 0:
+            return
+        metrics.log_scalar(
+            "loss",
+            loss_sum / sample_size / math.log(2),
+            sample_size,
+            round=3,
+        )
+        metrics.log_scalar(
+            "loss_mol_to_pocket",
+            mol_loss_sum / sample_size / math.log(2),
+            sample_size,
+            round=3,
+        )
+        metrics.log_scalar(
+            "loss_pocket_to_mol",
+            pocket_loss_sum / sample_size / math.log(2),
+            sample_size,
+            round=3,
+        )
+        if query_count == 0:
+            return
+        mrr_sum = sum(log.get("m2p_mrr_sum", 0) for log in logging_outputs)
+        metrics.log_scalar(
+            f"{split}_m2p_mrr",
+            mrr_sum / query_count,
+            query_count,
+            round=4,
+        )
+        top_k_names = sorted(
+            {
+                key
+                for log in logging_outputs
+                for key in log
+                if key.startswith("m2p_top") and key.endswith("_hits")
+            }
+        )
+        for key in top_k_names:
+            hits = sum(log.get(key, 0) for log in logging_outputs)
+            top_k = key[len("m2p_top") : -len("_hits")]
+            metrics.log_scalar(
+                f"{split}_m2p_top{top_k}",
+                hits / query_count,
+                query_count,
+                round=4,
+            )
+
+    @staticmethod
+    def logging_outputs_can_be_summed(is_train) -> bool:
+        return True
+
+
+def _as_string_list(values):
+    if isinstance(values, torch.Tensor):
+        values = values.detach().cpu().tolist()
+    return [str(value) for value in values]
+
+
+def _positive_lookup_for_sample(task, sample):
+    fallback = getattr(task, "positive_pockets_by_ligand", {})
+    split_values = sample.get("split")
+    if split_values is None:
+        return fallback
+    splits = _as_string_list(split_values)
+    if not splits:
+        return fallback
+    first_split = splits[0]
+    if any(split != first_split for split in splits):
+        return fallback
+    by_split = getattr(task, "positive_pockets_by_ligand_by_split", {})
+    return by_split.get(first_split, fallback)
+
+
+def _build_positive_mask(ligand_keys, pocket_keys, positives_by_ligand, device):
+    mask = torch.zeros(
+        (len(ligand_keys), len(pocket_keys)),
+        dtype=torch.bool,
+        device=device,
+    )
+    for ligand_index, ligand_key in enumerate(ligand_keys):
+        positive_pockets = positives_by_ligand.get(ligand_key)
+        if positive_pockets:
+            for pocket_index, pocket_key in enumerate(pocket_keys):
+                if pocket_key in positive_pockets:
+                    mask[ligand_index, pocket_index] = True
+        else:
+            for pocket_index, pocket_ligand_key in enumerate(ligand_keys):
+                if ligand_key == pocket_ligand_key:
+                    mask[ligand_index, pocket_index] = True
+
+    diagonal_size = min(mask.size(0), mask.size(1))
+    if diagonal_size:
+        diagonal = torch.arange(diagonal_size, device=device)
+        mask[diagonal, diagonal] = True
+    return mask
+
+
+def _multi_positive_direction_loss(logits, positive_mask, reduce=True):
+    valid_queries = positive_mask.any(dim=1)
+    valid_count = valid_queries.long().sum()
+    if valid_count.item() == 0:
+        return logits.sum() * 0.0, valid_count
+
+    logits = logits[valid_queries]
+    positive_mask = positive_mask[valid_queries]
+    denominator = torch.logsumexp(logits, dim=1)
+    positive_logits = logits.masked_fill(~positive_mask, -torch.inf)
+    numerator = torch.logsumexp(positive_logits, dim=1)
+    losses = -(numerator - denominator)
+    if reduce:
+        return losses.sum(), valid_count
+    return losses, valid_count
+
+
+def _ranking_metric_sums(logits, positive_mask, top_k_values):
+    valid_queries = positive_mask.any(dim=1)
+    if valid_queries.long().sum().item() == 0:
+        zero = logits.new_tensor(0.0)
+        return {
+            "query_count": zero,
+            "mrr_sum": zero,
+            "hits_at_k": {top_k: zero for top_k in top_k_values},
+        }
+
+    logits = logits[valid_queries]
+    positive_mask = positive_mask[valid_queries]
+    ranked_indices = torch.argsort(logits, dim=1, descending=True)
+    ranked_positive = positive_mask.gather(1, ranked_indices)
+    first_positive_rank = ranked_positive.float().argmax(dim=1) + 1
+    query_count = logits.new_tensor(float(logits.size(0)))
+    mrr_sum = (1.0 / first_positive_rank.float()).sum()
+    hits_at_k = {}
+    for top_k in top_k_values:
+        top_k = min(int(top_k), ranked_positive.size(1))
+        hits_at_k[top_k] = ranked_positive[:, :top_k].any(dim=1).float().sum()
+    return {
+        "query_count": query_count,
+        "mrr_sum": mrr_sum,
+        "hits_at_k": hits_at_k,
+    }
+
+
 @register_loss("multi_task_BCE")
 class MultiTaskBCELoss(CrossEntropyLoss):
     def __init__(self, task):

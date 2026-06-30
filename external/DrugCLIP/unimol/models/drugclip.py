@@ -51,6 +51,14 @@ class BindingAffinityModel(BaseUnicoreModel):
             default=1,
             help="recycling nums of decoder",
         )
+        parser.add_argument(
+            "--disable-duplicate-mask",
+            action="store_true",
+            help=(
+                "return raw in-batch similarities instead of masking duplicate "
+                "molecules/pockets inside the model"
+            ),
+        )
 
 
     def __init__(self, args, mol_dictionary, pocket_dictionary):
@@ -71,7 +79,7 @@ class BindingAffinityModel(BaseUnicoreModel):
             args.mol.encoder_embed_dim, 128, "relu"
         )
 
-        self.logit_scale = nn.Parameter(torch.ones([1], device="cuda") * np.log(14))
+        self.logit_scale = nn.Parameter(torch.ones([1]) * np.log(14))
         
 
         
@@ -114,6 +122,8 @@ class BindingAffinityModel(BaseUnicoreModel):
         masked_tokens=None,
         features_only=True,
         is_train=True,
+        mask_duplicate_pairs=None,
+        apply_logit_scale=True,
         **kwargs
     ):
         def get_dist_features(dist, et, flag):
@@ -167,35 +177,45 @@ class BindingAffinityModel(BaseUnicoreModel):
         ba_predict = torch.matmul(pocket_emb, torch.transpose(mol_emb, 0, 1))
 
         
-        # mask duplicate mols and pockets in same batch
-        
-        bsz = ba_predict.shape[0]
-        
-        pockets = np.array(pocket_list, dtype=str)
-        pockets = np.expand_dims(pockets, 1)
-        matrix1 = np.repeat(pockets, len(pockets), 1)
-        matrix2 = np.repeat(np.transpose(pockets), len(pockets), 0)
-        pocket_duplicate_matrix = matrix1==matrix2
-        pocket_duplicate_matrix = 1*pocket_duplicate_matrix
-        pocket_duplicate_matrix = torch.tensor(pocket_duplicate_matrix, dtype=ba_predict.dtype).cuda()
-        
-        mols = np.array(smi_list, dtype=str)
-        mols = np.expand_dims(mols, 1)
-        matrix1 = np.repeat(mols, len(mols), 1)
-        matrix2 = np.repeat(np.transpose(mols), len(mols), 0)
-        mol_duplicate_matrix = matrix1==matrix2
-        mol_duplicate_matrix = 1*mol_duplicate_matrix
-        mol_duplicate_matrix = torch.tensor(mol_duplicate_matrix, dtype=ba_predict.dtype).cuda()
+        if mask_duplicate_pairs is None:
+            mask_duplicate_pairs = not getattr(self.args, "disable_duplicate_mask", False)
 
-        
-        
+        if apply_logit_scale:
+            logit_scale = self.logit_scale.exp()
+            if getattr(self.args, "trainable_params", "all") != "projection-and-logit-scale":
+                logit_scale = logit_scale.detach()
+            ba_predict = ba_predict * logit_scale
+        if mask_duplicate_pairs:
+            # mask duplicate mols and pockets in same batch
+            bsz = ba_predict.shape[0]
 
-        onehot_labels = torch.eye(bsz).cuda()
-        indicater_matrix = pocket_duplicate_matrix + mol_duplicate_matrix - 2*onehot_labels
-        
-        #print(ba_predict.shape)
-        ba_predict = ba_predict *  self.logit_scale.exp().detach()
-        ba_predict = indicater_matrix * -1e6 + ba_predict
+            pockets = np.array(pocket_list, dtype=str)
+            pockets = np.expand_dims(pockets, 1)
+            matrix1 = np.repeat(pockets, len(pockets), 1)
+            matrix2 = np.repeat(np.transpose(pockets), len(pockets), 0)
+            pocket_duplicate_matrix = matrix1 == matrix2
+            pocket_duplicate_matrix = 1 * pocket_duplicate_matrix
+            pocket_duplicate_matrix = torch.tensor(
+                pocket_duplicate_matrix,
+                dtype=ba_predict.dtype,
+                device=ba_predict.device,
+            )
+
+            mols = np.array(smi_list, dtype=str)
+            mols = np.expand_dims(mols, 1)
+            matrix1 = np.repeat(mols, len(mols), 1)
+            matrix2 = np.repeat(np.transpose(mols), len(mols), 0)
+            mol_duplicate_matrix = matrix1 == matrix2
+            mol_duplicate_matrix = 1 * mol_duplicate_matrix
+            mol_duplicate_matrix = torch.tensor(
+                mol_duplicate_matrix,
+                dtype=ba_predict.dtype,
+                device=ba_predict.device,
+            )
+
+            onehot_labels = torch.eye(bsz, device=ba_predict.device)
+            indicater_matrix = pocket_duplicate_matrix + mol_duplicate_matrix - 2 * onehot_labels
+            ba_predict = indicater_matrix * -1e6 + ba_predict
 
         return ba_predict, self.logit_scale.exp() #_pocket, ba_predict_mol
 
@@ -294,6 +314,3 @@ def drugclip_architecture(args):
     args.pocket.delta_pair_repr_norm_loss = -1.0
 
     base_architecture(args)
-
-
-
