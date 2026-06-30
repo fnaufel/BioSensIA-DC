@@ -313,10 +313,15 @@ class DrugCLIP(UnicoreTask):
         return cls(args, mol_dictionary, pocket_dictionary)
 
     def load_dataset(self, split, **kwargs):
-        """Load a given dataset split.
-        'smi','pocket','atoms','coordinates','pocket_atoms','pocket_coordinates'
+        """Load one DrugCLIP LMDB split.
+
+        Records are expected to contain the encoder input fields ``smi``,
+        ``pocket``, ``atoms``, ``coordinates``, ``pocket_atoms``, and
+        ``pocket_coordinates``. BioSensIA-annotated LMDBs may also contain
+        ``ligand_key`` and ``pocket_key`` for multi-positive fine-tuning.
+
         Args:
-            split (str): name of the data scoure (e.g., bppp)
+            split (str): split name, such as ``train`` or ``valid``.
         """
         data_path = os.path.join(self.args.data, split + ".lmdb")
         raw_dataset = LMDBDataset(data_path)
