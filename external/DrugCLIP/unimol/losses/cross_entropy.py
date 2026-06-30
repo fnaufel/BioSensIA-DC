@@ -917,8 +917,11 @@ def _ranking_metric_sums(logits, positive_mask, top_k_values):
     mrr_sum = (1.0 / first_positive_rank.float()).sum()
     hits_at_k = {}
     for top_k in top_k_values:
-        top_k = min(int(top_k), ranked_positive.size(1))
-        hits_at_k[top_k] = ranked_positive[:, :top_k].any(dim=1).float().sum()
+        requested_top_k = int(top_k)
+        effective_top_k = min(requested_top_k, ranked_positive.size(1))
+        hits_at_k[requested_top_k] = (
+            ranked_positive[:, :effective_top_k].any(dim=1).float().sum()
+        )
     return {
         "query_count": query_count,
         "mrr_sum": mrr_sum,

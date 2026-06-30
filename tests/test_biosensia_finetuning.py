@@ -21,6 +21,7 @@ sys.path.insert(0, str(REPO_ROOT / "external/DrugCLIP"))
 from unimol.losses.cross_entropy import (  # noqa: E402
     _build_positive_mask,
     _multi_positive_direction_loss,
+    _ranking_metric_sums,
 )
 from unimol.tasks.drugclip import (  # noqa: E402
     LigandCenteredBatchDataset,
@@ -126,6 +127,28 @@ def test_multi_positive_mask_and_loss_use_known_pairs():
 
     assert count.item() == 3
     assert loss.item() < 0.1
+
+
+def test_ranking_metric_sums_preserves_requested_top_k_names():
+    logits = torch.tensor(
+        [
+            [4.0, 3.0, 2.0, 1.0],
+            [1.0, 2.0, 3.0, 4.0],
+        ]
+    )
+    positive_mask = torch.tensor(
+        [
+            [False, False, False, True],
+            [False, True, False, False],
+        ]
+    )
+
+    metrics = _ranking_metric_sums(logits, positive_mask, top_k_values=(1, 3, 5))
+
+    assert set(metrics["hits_at_k"]) == {1, 3, 5}
+    assert metrics["hits_at_k"][1].item() == 0
+    assert metrics["hits_at_k"][3].item() == 1
+    assert metrics["hits_at_k"][5].item() == 2
 
 
 class _TinyDataset:
