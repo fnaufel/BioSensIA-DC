@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import pickle
 import shutil
 from collections.abc import Iterable, Mapping, Sequence
@@ -13,9 +14,12 @@ import lmdb
 import numpy as np
 import polars as pl
 from rdkit import Chem
+from tqdm.auto import tqdm
 
 from lmdb_helpers import write_lmdb_records
 
+
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_DRUGCLIP_DATA_DIR = Path("external/DrugCLIP/data")
 DEFAULT_FINETUNE_DATA_DIR = Path("data/biosensia_finetune")
@@ -33,6 +37,7 @@ def build_biosensia_finetuning_data(
     pocket_policy: str = "metadata_pocket",
     overwrite: bool = True,
     map_size: int = 1 << 40,
+    show_progress: bool = True,
 ) -> dict[str, Any]:
     """Create a DrugCLIP data directory annotated for BioSensIA fine-tuning.
 
@@ -49,19 +54,39 @@ def build_biosensia_finetuning_data(
 
     source_data_dir = Path(source_data_dir)
     output_data_dir = Path(output_data_dir)
+    LOGGER.info(
+        "building BioSensIA fine-tuning data: source=%s output=%s splits=%s "
+        "ligand_policy=%s pocket_policy=%s overwrite=%s",
+        source_data_dir,
+        output_data_dir,
+        ",".join(splits),
+        ligand_policy,
+        pocket_policy,
+        overwrite,
+    )
+    LOGGER.info("creating output directory %s", output_data_dir)
     output_data_dir.mkdir(parents=True, exist_ok=True)
 
     for dictionary_name in ("dict_mol.txt", "dict_pkt.txt"):
         source_dictionary = source_data_dir / dictionary_name
         if not source_dictionary.exists():
             raise FileNotFoundError(f"DrugCLIP dictionary not found: {source_dictionary}")
-        shutil.copy2(source_dictionary, output_data_dir / dictionary_name)
+        target_dictionary = output_data_dir / dictionary_name
+        LOGGER.info("copying dictionary %s -> %s", source_dictionary, target_dictionary)
+        shutil.copy2(source_dictionary, target_dictionary)
 
-    metadata = _load_pair_metadata(pair_table_path)
+    metadata = _load_pair_metadata(pair_table_path, show_progress=show_progress)
     split_summaries = {}
-    for split in splits:
+    split_iter = tqdm(
+        tuple(splits),
+        desc="Annotating LMDB splits",
+        unit="split",
+        disable=not show_progress,
+    )
+    for split in split_iter:
         source_lmdb = source_data_dir / f"{split}.lmdb"
         output_lmdb = output_data_dir / f"{split}.lmdb"
+        LOGGER.info("annotating split %s: %s -> %s", split, source_lmdb, output_lmdb)
         split_summaries[split] = annotate_lmdb_records(
             source_lmdb,
             output_lmdb,
@@ -71,9 +96,11 @@ def build_biosensia_finetuning_data(
             pocket_policy=pocket_policy,
             overwrite=overwrite,
             map_size=map_size,
+            show_progress=show_progress,
         )
+        LOGGER.info("finished split %s: %s", split, split_summaries[split])
 
-    return {
+    summary = {
         "source_data_dir": str(source_data_dir),
         "output_data_dir": str(output_data_dir),
         "pair_table_path": str(pair_table_path) if pair_table_path else None,
@@ -81,6 +108,8 @@ def build_biosensia_finetuning_data(
         "pocket_policy": pocket_policy,
         "splits": split_summaries,
     }
+    LOGGER.info("finished BioSensIA fine-tuning data build")
+    return summary
 
 
 def annotate_lmdb_records(
@@ -93,6 +122,7 @@ def annotate_lmdb_records(
     pocket_policy: str = "metadata_pocket",
     overwrite: bool = True,
     map_size: int = 1 << 40,
+    show_progress: bool = True,
 ) -> dict[str, Any]:
     """Copy one DrugCLIP LMDB split and add BioSensIA identity keys."""
 
@@ -100,11 +130,26 @@ def annotate_lmdb_records(
     if not source_lmdb.exists():
         raise FileNotFoundError(f"LMDB split not found: {source_lmdb}")
 
+    total_records = _lmdb_entry_count(source_lmdb)
+    LOGGER.info(
+        "reading %d records from split %s with ligand_policy=%s and pocket_policy=%s",
+        total_records,
+        split,
+        ligand_policy,
+        pocket_policy,
+    )
     records = []
     ligand_keys = set()
     pocket_keys = set()
     metadata_hits = 0
-    for lmdb_key, record in _iter_lmdb_records(source_lmdb):
+    record_iter = tqdm(
+        _iter_lmdb_records(source_lmdb),
+        total=total_records,
+        desc=f"Annotating {split}.lmdb",
+        unit="record",
+        disable=not show_progress,
+    )
+    for lmdb_key, record in record_iter:
         metadata_row = (
             pair_metadata.get((split, lmdb_key))
             if pair_metadata is not None
@@ -131,8 +176,9 @@ def annotate_lmdb_records(
         ligand_keys.add(ligand_key)
         pocket_keys.add(pocket_key)
 
+    LOGGER.info("writing %d annotated records to %s", len(records), output_lmdb)
     write_lmdb_records(records, output_lmdb, overwrite=overwrite, map_size=map_size)
-    return {
+    summary = {
         "source_lmdb": str(source_lmdb),
         "output_lmdb": str(output_lmdb),
         "records": len(records),
@@ -140,6 +186,15 @@ def annotate_lmdb_records(
         "ligands": len(ligand_keys),
         "pockets": len(pocket_keys),
     }
+    LOGGER.info(
+        "annotated split %s: records=%d metadata_hits=%d ligands=%d pockets=%d",
+        split,
+        summary["records"],
+        summary["metadata_hits"],
+        summary["ligands"],
+        summary["pockets"],
+    )
+    return summary
 
 
 def choose_ligand_key(
@@ -256,21 +311,51 @@ def target_fishing_rank_metrics(
 
 def _load_pair_metadata(
     pair_table_path: str | Path | None,
+    *,
+    show_progress: bool = True,
 ) -> dict[tuple[str, str], dict[str, Any]] | None:
     if pair_table_path is None:
+        LOGGER.info("no pair metadata table configured")
         return None
     pair_table_path = Path(pair_table_path)
     if not pair_table_path.exists():
+        LOGGER.warning("pair metadata table not found: %s", pair_table_path)
         return None
+    LOGGER.info("loading pair metadata from %s", pair_table_path)
     df = pl.read_parquet(pair_table_path)
     required = {"split", "lmdb_key"}
     missing = required.difference(df.columns)
     if missing:
         raise ValueError(f"Pair table is missing required columns: {sorted(missing)}")
+    LOGGER.info("indexing %d pair metadata rows", df.height)
     metadata = {}
-    for row in df.iter_rows(named=True):
+    row_iter = tqdm(
+        df.iter_rows(named=True),
+        total=df.height,
+        desc="Indexing pair metadata",
+        unit="row",
+        disable=not show_progress,
+    )
+    for row in row_iter:
         metadata[(str(row["split"]), str(row["lmdb_key"]))] = row
+    LOGGER.info("loaded %d pair metadata entries", len(metadata))
     return metadata
+
+
+def _lmdb_entry_count(path: Path) -> int:
+    env = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        return env.stat()["entries"]
+    finally:
+        env.close()
 
 
 def _iter_lmdb_records(path: Path):
@@ -385,11 +470,26 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="fail if an output LMDB already exists",
     )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="disable progress bars",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Python logging level. Default: INFO",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
+    logging.basicConfig(
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=str(args.log_level).upper(),
+    )
     splits = tuple(split.strip() for split in args.splits.split(",") if split.strip())
     summary = build_biosensia_finetuning_data(
         source_data_dir=args.source_data_dir,
@@ -399,6 +499,7 @@ def main() -> None:
         ligand_policy=args.ligand_policy,
         pocket_policy=args.pocket_policy,
         overwrite=not args.no_overwrite,
+        show_progress=not args.no_progress,
     )
     print(summary)
 
