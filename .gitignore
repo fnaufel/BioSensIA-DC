@@ -30,3 +30,5 @@ external/DrugCLIP/savedir
 external/Uni-Core/*.so
 /scratch/training_data_pairs.parquet
 /runs/
+/data/biosensia_finetune/*.txt
+/data/biosensia_finetune/*.lmdb
