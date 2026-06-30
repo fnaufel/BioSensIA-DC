@@ -1,4 +1,4 @@
-"""Utilities for preparing, running, and reading DrugCLIP target fishing."""
+"""Utilities for BioSensIA target fishing with DrugCLIP encoders."""
 
 from __future__ import annotations
 
@@ -537,7 +537,7 @@ def build_candidate_pockets_frame(
 def build_ranked_pockets_frame(
     ranked_pockets_path: str | Path = DEFAULT_RANKED_POCKETS_PATH,
 ) -> pl.DataFrame:
-    """Read DrugCLIP target-fishing scores and add predictable RCSB PDB links."""
+    """Read BioSensIA target-fishing scores and add predictable RCSB PDB links."""
 
     ranked_pockets_path = Path(ranked_pockets_path)
     if not ranked_pockets_path.exists():
@@ -580,7 +580,7 @@ def build_drugclip_target_fishing_args(
     fp16: bool = True,
     cpu: bool = False,
 ):
-    """Create the Uni-Core args object used by DrugCLIP target fishing.
+    """Create the Uni-Core args object used by BioSensIA target fishing.
 
     The registered Uni-Core task remains DrugCLIP's ``drugclip`` task. This
     helper only builds an argument namespace from repository-root paths so the
@@ -737,7 +737,7 @@ def load_drugclip_model_for_target_fishing(args):
         torch.cuda.set_device(args.device_id)
     else:
         LOGGER.warning(
-            "CUDA is not available or --cpu was set. DrugCLIP target fishing "
+            "CUDA is not available or --cpu was set. BioSensIA target fishing "
             "may fail because DrugCLIP's encoder path moves batches to CUDA."
         )
 
@@ -829,7 +829,10 @@ def run_target_fishing(
 
 def _build_target_fishing_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run DrugCLIP target fishing from the BioSensIA-DC directory.",
+        description=(
+            "Run BioSensIA target fishing with DrugCLIP encoders from the "
+            "BioSensIA-DC directory."
+        ),
     )
     parser.add_argument(
         "--drugclip-dir",
@@ -898,7 +901,10 @@ def _build_target_fishing_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cpu",
         action="store_true",
-        help="request CPU execution; DrugCLIP target fishing is normally GPU-only.",
+        help=(
+            "request CPU execution; the DrugCLIP encoder path used for target "
+            "fishing is normally GPU-only."
+        ),
     )
     parser.add_argument(
         "--log-level",

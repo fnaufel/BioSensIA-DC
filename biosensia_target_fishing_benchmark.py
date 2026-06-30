@@ -41,6 +41,43 @@ def run_target_fishing_benchmark(
     fp16: bool = True,
     cpu: bool = False,
 ) -> dict[str, Any]:
+    """Run a BioSensIA target-fishing benchmark for one DrugCLIP checkpoint.
+
+    This is the programmatic entry point behind the CLI in this module. It
+    evaluates the inverse of DrugCLIP's usual virtual-screening setup: each
+    query molecule is compared with a library of candidate pockets, and the
+    benchmark checks whether the known positive pocket identities for that
+    molecule appear near the top of the ranked pocket list.
+
+    ``positives_path`` must point to a table in ``.parquet``, ``.csv``,
+    ``.jsonl``, or ``.ndjson`` format. The table needs at least two columns:
+    one query identifier column and one pocket identifier column. Their names
+    are controlled by ``query_column`` and ``pocket_column``. The values in
+    ``query_column`` must match the molecule names returned from ``mol_path``;
+    the values in ``pocket_column`` must match the candidate pocket names
+    returned from ``pocket_path``. Multiple rows may share the same query
+    identifier, which represents a multi-positive target-fishing case.
+
+    The model checkpoint, DrugCLIP data directory, query molecule LMDB, pocket
+    LMDB, embedding cache directory, batch sizes, worker count, seed, precision,
+    and device mode are passed through to the BioSensIA target-fishing helpers
+    built around the DrugCLIP task/model APIs. Candidate pocket embeddings may
+    be cached in ``emb_dir``; query molecule embeddings are recomputed for the
+    supplied ``mol_path``.
+
+    ``top_k`` controls how many ranked pockets are retrieved per query.
+    ``metric_top_k`` controls which top-k cutoffs are reported by
+    :func:`biosensia_finetuning.target_fishing_rank_metrics`. For interpretable
+    metrics, ``top_k`` should be at least ``max(metric_top_k)`` because metrics
+    are computed from the retrieved ranked list.
+
+    Returns:
+        A JSON-serializable dictionary containing the checkpoint path, query
+        molecule LMDB path, candidate pocket LMDB path, positives table path,
+        retrieval depth, and target-fishing metrics such as MRR, top-k
+        accuracy, and recall@k.
+    """
+
     positives_by_query = read_positive_pairs(
         positives_path,
         query_column=query_column,

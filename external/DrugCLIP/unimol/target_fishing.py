@@ -7,7 +7,7 @@
 """Compatibility entry point for BioSensIA-DC target fishing.
 
 The target-fishing implementation lives in the repository-root module
-``biosensia_target_fishing``. This file keeps the original DrugCLIP-style
+``biosensia_target_fishing``. This file keeps a DrugCLIP-repository-style
 ``python ./unimol/target_fishing.py ...`` command working for scripts that run
 from ``external/DrugCLIP``.
 """
