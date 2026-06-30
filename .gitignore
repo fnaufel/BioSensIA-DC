@@ -28,3 +28,4 @@ external/DrugCLIP/savedir
 
 # Libraries
 external/Uni-Core/*.so
+/scratch/training_data_pairs.parquet

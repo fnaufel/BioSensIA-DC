@@ -1,30 +1,72 @@
 import marimo
 
-__generated_with = "0.23.6"
+__generated_with = "0.23.9"
 app = marimo.App()
 
 
 @app.cell
 def _():
-    from mo_shell import sh 
-
-    return
-
-
-@app.cell
-def _():
     import polars as pl
-    import altair as alt
-    alt.data_transformers.enable("vegafusion")
+
+    return (pl,)
+
+
+@app.cell
+def _(pl):
+    df = pl.read_parquet(
+        "data/biosensia_finetune/training_data_pairs.parquet"
+    ).with_columns(
+        pl.col('lmdb_key').cast(pl.Int32)
+    )
+
+    df.head()
+    return (df,)
+
+
+@app.cell
+def _(df):
+    df.describe()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## LMDB keys
+    """)
     return
 
 
 @app.cell
-def _():
-    import scratch.analyze_pdb_complexes as apc
+def _(df, pl):
+    df.select(
+        pl.col('lmdb_key').min().alias('min'),
+        pl.col('lmdb_key').max().alias('max')
+    )
+    return
 
-    df = apc.build_complexes_frame(limit=20)
-    df
+
+@app.cell
+def _(df, pl):
+    df.group_by('split').agg(
+        pl.len()
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Uniprot accessions
+    """)
+    return
+
+
+@app.cell
+def _(df):
+    df.n_unique(
+        subset=['pocket_uniprot_accessions']
+    )
     return
 
 
