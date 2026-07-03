@@ -5,13 +5,16 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
+#SBATCH --time=15:00:00
 #SBATCH --output=fine-tune-%j.out
 #SBATCH --error=fine-tune-%j.err
 
 set -euo pipefail
 
 REPO_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
+export RUN_NAME=projection_lr1e-4_tau071_lambda-mp5pm5_bs96_bsv48_uf1_ppl8
 
+echo "Run name: ${RUN_NAME}"
 echo "Job ID: ${SLURM_JOB_ID}"
 echo "Node: ${SLURM_NODELIST}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
@@ -21,7 +24,6 @@ echo "CPUs per task: ${SLURM_CPUS_PER_TASK}"
 spack load cuda@12.4.1
 source "$REPO_DIR/.venv/bin/activate"
 
-export RUN_NAME=projection_lr1e-4_tau071_lambda-mp1pm0_bs32_uf2_ppl4
 export RUN_DIR="$PWD/runs/biosensia_finetune/$RUN_NAME"
 
 SAVE_DIR="$RUN_DIR/checkpoints" \
@@ -33,13 +35,14 @@ TRAINABLE_PARAMS=projection \
 LR=1e-4 \
 TEMPERATURE=0.07142857142857142 \
 MAX_EPOCH=50 \
-BATCH_SIZE=32 \
-BATCH_SIZE_VALID=32 \
-UPDATE_FREQ=2 \
-POSITIVES_PER_LIGAND=4 \
-LAMBDA_MOL_TO_POCKET=1.0 \
-LAMBDA_POCKET_TO_MOL=0.0 \
+BATCH_SIZE=96 \
+BATCH_SIZE_VALID=48 \
+UPDATE_FREQ=1 \
+POSITIVES_PER_LIGAND=8 \
+LAMBDA_MOL_TO_POCKET=0.5 \
+LAMBDA_POCKET_TO_MOL=0.5 \
 METRIC_TOP_K=1,3,5 \
 BEST_METRIC=valid_m2p_mrr \
+PATIENCE=8 \
 bash train_biosensia_finetune.sh
 

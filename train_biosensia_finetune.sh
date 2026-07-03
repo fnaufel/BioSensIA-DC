@@ -29,6 +29,7 @@ LAMBDA_POCKET_TO_MOL="${LAMBDA_POCKET_TO_MOL:-0.0}"
 TEMPERATURE="${TEMPERATURE:-0.07142857142857142}"
 METRIC_TOP_K="${METRIC_TOP_K:-1,3,5}"
 BEST_METRIC="${BEST_METRIC:-valid_m2p_mrr}"
+PATIENCE="${PATIENCE:-2000}"
 
 if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
   export CUDA_VISIBLE_DEVICES="${GPU_ID:-0}"
@@ -93,7 +94,7 @@ python \
   --log-format simple \
   --validate-interval 1 \
   --best-checkpoint-metric "$BEST_METRIC" \
-  --patience 2000 \
+  --patience "$PATIENCE" \
   --all-gather-list-size 2048000 \
   --save-dir "$SAVE_DIR" \
   --tmp-save-dir "$TMP_SAVE_DIR" \
