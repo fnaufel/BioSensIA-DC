@@ -1,0 +1,130 @@
+Job ID: 19438
+Node: pedro-alvares-cabral
+CUDA_VISIBLE_DEVICES=0,1
+CPUs per task: 4
+2026-06-30 17:20:53 | INFO | unicore.distributed.utils | distributed init (rank 0): env://
+2026-06-30 17:20:53 | INFO | unicore.distributed.utils | initialized host pedro-alvares-cabral as rank 0
+2026-06-30 17:20:53 | INFO | unicore.distributed.utils | distributed init (rank 1): env://
+2026-06-30 17:20:53 | INFO | unicore.distributed.utils | initialized host pedro-alvares-cabral as rank 1
+2026-06-30 17:20:53 | INFO | unicore_cli.train | Namespace(no_progress_bar=False, log_interval=100, log_format='simple', tensorboard_logdir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_lr1e-4_tau071_lambda-mp1pm0/tensorboard', wandb_project='', wandb_name='', seed=1, cpu=False, fp16=True, bf16=False, bf16_sr=False, allreduce_fp32_grad=False, fp16_no_flatten_grads=False, fp16_init_scale=4, fp16_scale_window=256, fp16_scale_tolerance=0.0, min_loss_scale=0.0001, threshold_loss_scale=None, user_dir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol', empty_cache_freq=0, all_gather_list_size=2048000, suppress_crashes=False, profile=False, ema_decay=-1.0, validate_with_ema=False, loss='biosensia_multi_positive', optimizer='adam', lr_scheduler='polynomial_decay', task='drugclip', num_workers=2, skip_invalid_size_inputs_valid_test=False, batch_size=12, required_batch_size_multiple=1, data_buffer_size=10, train_subset='train', valid_subset='valid', validate_interval=1, validate_interval_updates=0, validate_after_updates=0, fixed_validation_seed=None, disable_validation=False, batch_size_valid=16, max_valid_steps=None, curriculum=0, distributed_world_size=2, distributed_rank=0, distributed_backend='nccl', distributed_init_method='env://', distributed_port=-1, device_id=0, distributed_no_spawn=True, ddp_backend='c10d', bucket_cap_mb=25, fix_batches_to_gpus=False, find_unused_parameters=True, fast_stat_sync=False, broadcast_buffers=False, nprocs_per_node=2, arch='drugclip', max_epoch=50, max_update=0, stop_time_hours=0, no_weight_decay_names='', clip_norm=1.0, per_sample_clip_norm=0, update_freq=[4], lr=[0.0001], stop_min_lr=-1, save_dir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_lr1e-4_tau071_lambda-mp1pm0/checkpoints', tmp_save_dir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_lr1e-4_tau071_lambda-mp1pm0/tmp', restore_file='checkpoint_last.pt', finetune_from_model='/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt', load_from_ema=False, reset_dataloader=False, reset_lr_scheduler=False, reset_meters=False, reset_optimizer=False, optimizer_overrides='{}', save_interval=1, save_interval_updates=0, keep_interval_updates=-1, keep_last_epochs=5, keep_best_checkpoints=-1, no_save=False, no_epoch_checkpoints=False, no_last_checkpoints=False, no_save_optimizer_state=False, best_checkpoint_metric='valid_m2p_mrr', maximize_best_checkpoint_metric=True, patience=2000, checkpoint_suffix='', recycling=1, data='/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune', finetune_mol_model=None, finetune_pocket_model=None, dist_threshold=6.0, max_pocket_atoms=256, test_model=False, reg=False, trainable_params='projection', biosensia_batch_sampler='ligand', biosensia_positives_per_ligand=2, biosensia_lambda_mol_to_pocket=1.0, biosensia_lambda_pocket_to_mol=0.0, biosensia_temperature=0.07142857142857142, biosensia_metric_top_k='1,3,5', adam_betas='(0.9, 0.999)', adam_eps=1e-08, weight_decay=0.0, force_anneal=None, warmup_updates=0, warmup_ratio=0.06, end_learning_rate=0.0, power=1.0, total_num_update=1000000, disable_duplicate_mask=True, no_seed_provided=False, mol=Namespace(encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0), pocket=Namespace(encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0), encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0)
+2026-06-30 17:20:53 | INFO | unimol.tasks.drugclip | ligand dictionary: 30 types
+2026-06-30 17:20:53 | INFO | unimol.tasks.drugclip | pocket dictionary: 9 types
+23567 0.1
+23567 0.1
+23567 0.1
+23567 0.1
+2026-06-30 17:20:54 | INFO | unimol.tasks.drugclip | trainable parameter policy: projection (656640 / 98630223 parameters trainable)
+2026-06-30 17:20:54 | INFO | unicore_cli.train | BindingAffinityModel(
+  (mol_model): UniMolModel(
+    (embed_tokens): Embedding(31, 512, padding_idx=0)
+    (encoder): TransformerEncoderWithPair(
+      (emb_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (layers): ModuleList(
+        (0-14): 15 x TransformerEncoderLayer(
+          (self_attn): SelfMultiheadAttention(
+            (in_proj): Linear(in_features=512, out_features=1536, bias=True)
+            (out_proj): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=512, out_features=2048, bias=True)
+          (fc2): Linear(in_features=2048, out_features=512, bias=True)
+          (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+        )
+      )
+    )
+    (gbf_proj): NonLinearHead(
+      (linear1): Linear(in_features=128, out_features=128, bias=True)
+      (linear2): Linear(in_features=128, out_features=64, bias=True)
+    )
+    (gbf): GaussianLayer(
+      (means): Embedding(1, 128)
+      (stds): Embedding(1, 128)
+      (mul): Embedding(961, 1)
+      (bias): Embedding(961, 1)
+    )
+    (classification_heads): ModuleDict()
+  )
+  (pocket_model): UniMolModel(
+    (embed_tokens): Embedding(10, 512, padding_idx=0)
+    (encoder): TransformerEncoderWithPair(
+      (emb_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (layers): ModuleList(
+        (0-14): 15 x TransformerEncoderLayer(
+          (self_attn): SelfMultiheadAttention(
+            (in_proj): Linear(in_features=512, out_features=1536, bias=True)
+            (out_proj): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=512, out_features=2048, bias=True)
+          (fc2): Linear(in_features=2048, out_features=512, bias=True)
+          (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+        )
+      )
+    )
+    (gbf_proj): NonLinearHead(
+      (linear1): Linear(in_features=128, out_features=128, bias=True)
+      (linear2): Linear(in_features=128, out_features=64, bias=True)
+    )
+    (gbf): GaussianLayer(
+      (means): Embedding(1, 128)
+      (stds): Embedding(1, 128)
+      (mul): Embedding(100, 1)
+      (bias): Embedding(100, 1)
+    )
+    (classification_heads): ModuleDict()
+  )
+  (cross_distance_project): NonLinearHead(
+    (linear1): Linear(in_features=1088, out_features=1088, bias=True)
+    (linear2): Linear(in_features=1088, out_features=1, bias=True)
+  )
+  (holo_distance_project): DistanceHead(
+    (dense): Linear(in_features=576, out_features=576, bias=True)
+    (layer_norm): LayerNorm((576,), eps=1e-05, elementwise_affine=True)
+    (out_proj): Linear(in_features=576, out_features=1, bias=True)
+  )
+  (mol_project): NonLinearHead(
+    (linear1): Linear(in_features=512, out_features=512, bias=True)
+    (linear2): Linear(in_features=512, out_features=128, bias=True)
+  )
+  (pocket_project): NonLinearHead(
+    (linear1): Linear(in_features=512, out_features=512, bias=True)
+    (linear2): Linear(in_features=512, out_features=128, bias=True)
+  )
+  (fuse_project): NonLinearHead(
+    (linear1): Linear(in_features=256, out_features=256, bias=True)
+    (linear2): Linear(in_features=256, out_features=1, bias=True)
+  )
+  (classification_head): Sequential(
+    (0): Linear(in_features=1024, out_features=1024, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=1024, out_features=512, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=512, out_features=256, bias=True)
+    (5): ReLU()
+    (6): Linear(in_features=256, out_features=128, bias=True)
+    (7): ReLU()
+    (8): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+2026-06-30 17:20:54 | INFO | unicore_cli.train | task: DrugCLIP
+2026-06-30 17:20:54 | INFO | unicore_cli.train | model: BindingAffinityModel
+2026-06-30 17:20:54 | INFO | unicore_cli.train | loss: BioSensIAMultiPositiveLoss
+2026-06-30 17:20:54 | INFO | unicore_cli.train | num. model params: 98,630,223 (num. trained: 656,640)
+2026-06-30 17:20:54 | INFO | unicore.utils | ***********************CUDA enviroments for all 2 workers***********************
+2026-06-30 17:20:54 | INFO | unicore.utils | rank   0: capabilities =  8.6  ; total memory = 14.529 GB ; name = NVIDIA A2                               
+2026-06-30 17:20:54 | INFO | unicore.utils | rank   1: capabilities =  8.6  ; total memory = 14.529 GB ; name = NVIDIA A2                               
+2026-06-30 17:20:54 | INFO | unicore.utils | ***********************CUDA enviroments for all 2 workers***********************
+2026-06-30 17:20:55 | INFO | unicore_cli.train | training on 2 devices (GPUs)
+2026-06-30 17:20:55 | INFO | unicore_cli.train | batch size per device = 12
+2026-06-30 17:20:55 | INFO | unicore.checkpoint_utils | loading pretrained model from /home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt: optimizer, lr scheduler, meters, dataloader will be reset
+2026-06-30 17:20:55 | INFO | unicore.trainer | Preparing to load checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt
+2026-06-30 17:20:55 | INFO | unicore.trainer | Broadcast checkpoint from rank_0
+2026-06-30 17:20:56 | INFO | unicore.trainer | loading train data for epoch 1
+2026-06-30 17:21:12 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-06-30 17:21:13 | INFO | unicore.trainer | Loaded checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt
+2026-06-30 17:21:13 | INFO | unicore.optim.adam | using FusedAdam
+2026-06-30 17:21:13 | INFO | unicore.trainer | begin training epoch 1
+2026-06-30 17:21:13 | INFO | unicore_cli.train | Start iterating over samples
+2026-06-30 17:22:51 | INFO | train_inner | epoch 001:    100 / 696 loss=0.072, loss_mol_to_pocket=0.072, loss_pocket_to_mol=0.049, train_m2p_mrr=0.9901, train_m2p_top1=0.9835, train_m2p_top3=0.9971, train_m2p_top5=0.9927, train_m2p_top4=0.5909, ups=1.03, bsz=95.3, num_updates=100, lr=4.79616e-06, gnorm=0.188, clip=0, loss_scale=4, train_wall=97.01, gb_free=13.6, wall=116

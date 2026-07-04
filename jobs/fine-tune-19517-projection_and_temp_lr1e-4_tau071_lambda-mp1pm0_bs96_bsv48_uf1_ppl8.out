@@ -1,0 +1,540 @@
+Run name: projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8
+Job ID: 19517
+Node: pedro-alvares-cabral
+CUDA_VISIBLE_DEVICES=0,1
+CPUs per task: 4
+2026-07-04 15:02:24 | INFO | unicore.distributed.utils | distributed init (rank 0): env://
+2026-07-04 15:02:24 | INFO | unicore.distributed.utils | initialized host pedro-alvares-cabral as rank 0
+2026-07-04 15:02:29 | INFO | unicore.distributed.utils | distributed init (rank 1): env://
+2026-07-04 15:02:29 | INFO | unicore.distributed.utils | initialized host pedro-alvares-cabral as rank 1
+23567 0.1
+2026-07-04 15:02:29 | INFO | unicore_cli.train | Namespace(no_progress_bar=False, log_interval=100, log_format='simple', tensorboard_logdir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tensorboard', wandb_project='', wandb_name='', seed=1, cpu=False, fp16=True, bf16=False, bf16_sr=False, allreduce_fp32_grad=False, fp16_no_flatten_grads=False, fp16_init_scale=4, fp16_scale_window=256, fp16_scale_tolerance=0.0, min_loss_scale=0.0001, threshold_loss_scale=None, user_dir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol', empty_cache_freq=0, all_gather_list_size=2048000, suppress_crashes=False, profile=False, ema_decay=-1.0, validate_with_ema=False, loss='biosensia_multi_positive', optimizer='adam', lr_scheduler='polynomial_decay', task='drugclip', num_workers=2, skip_invalid_size_inputs_valid_test=False, batch_size=96, required_batch_size_multiple=1, data_buffer_size=10, train_subset='train', valid_subset='valid', validate_interval=1, validate_interval_updates=0, validate_after_updates=0, fixed_validation_seed=None, disable_validation=False, batch_size_valid=48, max_valid_steps=None, curriculum=0, distributed_world_size=2, distributed_rank=0, distributed_backend='nccl', distributed_init_method='env://', distributed_port=-1, device_id=0, distributed_no_spawn=True, ddp_backend='c10d', bucket_cap_mb=25, fix_batches_to_gpus=False, find_unused_parameters=True, fast_stat_sync=False, broadcast_buffers=False, nprocs_per_node=2, arch='drugclip', max_epoch=50, max_update=0, stop_time_hours=0, no_weight_decay_names='', clip_norm=1.0, per_sample_clip_norm=0, update_freq=[1], lr=[0.0001], stop_min_lr=-1, save_dir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints', tmp_save_dir='/home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp', restore_file='checkpoint_last.pt', finetune_from_model='/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt', load_from_ema=False, reset_dataloader=False, reset_lr_scheduler=False, reset_meters=False, reset_optimizer=False, optimizer_overrides='{}', save_interval=1, save_interval_updates=0, keep_interval_updates=-1, keep_last_epochs=5, keep_best_checkpoints=-1, no_save=False, no_epoch_checkpoints=False, no_last_checkpoints=False, no_save_optimizer_state=False, best_checkpoint_metric='valid_m2p_mrr', maximize_best_checkpoint_metric=True, patience=8, checkpoint_suffix='', recycling=1, data='/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune', finetune_mol_model=None, finetune_pocket_model=None, dist_threshold=6.0, max_pocket_atoms=256, test_model=False, reg=False, trainable_params='projection-and-logit-scale', biosensia_batch_sampler='ligand', biosensia_positives_per_ligand=8, biosensia_lambda_mol_to_pocket=1.0, biosensia_lambda_pocket_to_mol=0.0, biosensia_temperature=0.07142857142857142, biosensia_metric_top_k='1,3,5', adam_betas='(0.9, 0.999)', adam_eps=1e-08, weight_decay=0.0, force_anneal=None, warmup_updates=0, warmup_ratio=0.06, end_learning_rate=0.0, power=1.0, total_num_update=1000000, disable_duplicate_mask=True, no_seed_provided=False, mol=Namespace(encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0), pocket=Namespace(encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0), encoder_layers=15, encoder_embed_dim=512, encoder_ffn_embed_dim=2048, encoder_attention_heads=64, dropout=0.1, emb_dropout=0.1, attention_dropout=0.1, activation_dropout=0.0, pooler_dropout=0.0, max_seq_len=512, activation_fn='gelu', pooler_activation_fn='tanh', post_ln=False, masked_token_loss=-1.0, masked_coord_loss=-1.0, masked_dist_loss=-1.0, x_norm_loss=-1.0, delta_pair_repr_norm_loss=-1.0)
+2026-07-04 15:02:29 | INFO | unimol.tasks.drugclip | ligand dictionary: 30 types
+2026-07-04 15:02:29 | INFO | unimol.tasks.drugclip | pocket dictionary: 9 types
+23567 0.1
+23567 0.1
+23567 0.1
+2026-07-04 15:02:30 | INFO | unimol.tasks.drugclip | trainable parameter policy: projection-and-logit-scale (656641 / 98630223 parameters trainable)
+2026-07-04 15:02:30 | INFO | unicore_cli.train | BindingAffinityModel(
+  (mol_model): UniMolModel(
+    (embed_tokens): Embedding(31, 512, padding_idx=0)
+    (encoder): TransformerEncoderWithPair(
+      (emb_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (layers): ModuleList(
+        (0-14): 15 x TransformerEncoderLayer(
+          (self_attn): SelfMultiheadAttention(
+            (in_proj): Linear(in_features=512, out_features=1536, bias=True)
+            (out_proj): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=512, out_features=2048, bias=True)
+          (fc2): Linear(in_features=2048, out_features=512, bias=True)
+          (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+        )
+      )
+    )
+    (gbf_proj): NonLinearHead(
+      (linear1): Linear(in_features=128, out_features=128, bias=True)
+      (linear2): Linear(in_features=128, out_features=64, bias=True)
+    )
+    (gbf): GaussianLayer(
+      (means): Embedding(1, 128)
+      (stds): Embedding(1, 128)
+      (mul): Embedding(961, 1)
+      (bias): Embedding(961, 1)
+    )
+    (classification_heads): ModuleDict()
+  )
+  (pocket_model): UniMolModel(
+    (embed_tokens): Embedding(10, 512, padding_idx=0)
+    (encoder): TransformerEncoderWithPair(
+      (emb_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+      (layers): ModuleList(
+        (0-14): 15 x TransformerEncoderLayer(
+          (self_attn): SelfMultiheadAttention(
+            (in_proj): Linear(in_features=512, out_features=1536, bias=True)
+            (out_proj): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=512, out_features=2048, bias=True)
+          (fc2): Linear(in_features=2048, out_features=512, bias=True)
+          (final_layer_norm): LayerNorm(torch.Size([512]), eps=1e-05, elementwise_affine=True)
+        )
+      )
+    )
+    (gbf_proj): NonLinearHead(
+      (linear1): Linear(in_features=128, out_features=128, bias=True)
+      (linear2): Linear(in_features=128, out_features=64, bias=True)
+    )
+    (gbf): GaussianLayer(
+      (means): Embedding(1, 128)
+      (stds): Embedding(1, 128)
+      (mul): Embedding(100, 1)
+      (bias): Embedding(100, 1)
+    )
+    (classification_heads): ModuleDict()
+  )
+  (cross_distance_project): NonLinearHead(
+    (linear1): Linear(in_features=1088, out_features=1088, bias=True)
+    (linear2): Linear(in_features=1088, out_features=1, bias=True)
+  )
+  (holo_distance_project): DistanceHead(
+    (dense): Linear(in_features=576, out_features=576, bias=True)
+    (layer_norm): LayerNorm((576,), eps=1e-05, elementwise_affine=True)
+    (out_proj): Linear(in_features=576, out_features=1, bias=True)
+  )
+  (mol_project): NonLinearHead(
+    (linear1): Linear(in_features=512, out_features=512, bias=True)
+    (linear2): Linear(in_features=512, out_features=128, bias=True)
+  )
+  (pocket_project): NonLinearHead(
+    (linear1): Linear(in_features=512, out_features=512, bias=True)
+    (linear2): Linear(in_features=512, out_features=128, bias=True)
+  )
+  (fuse_project): NonLinearHead(
+    (linear1): Linear(in_features=256, out_features=256, bias=True)
+    (linear2): Linear(in_features=256, out_features=1, bias=True)
+  )
+  (classification_head): Sequential(
+    (0): Linear(in_features=1024, out_features=1024, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=1024, out_features=512, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=512, out_features=256, bias=True)
+    (5): ReLU()
+    (6): Linear(in_features=256, out_features=128, bias=True)
+    (7): ReLU()
+    (8): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+2026-07-04 15:02:30 | INFO | unicore_cli.train | task: DrugCLIP
+2026-07-04 15:02:30 | INFO | unicore_cli.train | model: BindingAffinityModel
+2026-07-04 15:02:30 | INFO | unicore_cli.train | loss: BioSensIAMultiPositiveLoss
+2026-07-04 15:02:30 | INFO | unicore_cli.train | num. model params: 98,630,223 (num. trained: 656,641)
+2026-07-04 15:02:31 | INFO | unicore.utils | ***********************CUDA enviroments for all 2 workers***********************
+2026-07-04 15:02:31 | INFO | unicore.utils | rank   0: capabilities =  8.6  ; total memory = 14.529 GB ; name = NVIDIA A2                               
+2026-07-04 15:02:31 | INFO | unicore.utils | rank   1: capabilities =  8.6  ; total memory = 14.529 GB ; name = NVIDIA A2                               
+2026-07-04 15:02:31 | INFO | unicore.utils | ***********************CUDA enviroments for all 2 workers***********************
+2026-07-04 15:02:31 | INFO | unicore_cli.train | training on 2 devices (GPUs)
+2026-07-04 15:02:31 | INFO | unicore_cli.train | batch size per device = 96
+2026-07-04 15:02:31 | INFO | unicore.checkpoint_utils | loading pretrained model from /home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt: optimizer, lr scheduler, meters, dataloader will be reset
+2026-07-04 15:02:31 | INFO | unicore.trainer | Preparing to load checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt
+2026-07-04 15:02:31 | INFO | unicore.trainer | Broadcast checkpoint from rank_0
+2026-07-04 15:02:32 | INFO | unicore.trainer | loading train data for epoch 1
+2026-07-04 15:02:48 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 15:02:48 | INFO | unicore.trainer | Loaded checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best_original.pt
+2026-07-04 15:02:48 | INFO | unicore.optim.adam | using FusedAdam
+2026-07-04 15:02:48 | INFO | unicore.trainer | begin training epoch 1
+2026-07-04 15:02:48 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 15:06:21 | INFO | train_inner | epoch 001:    100 / 355 loss=0.164, loss_mol_to_pocket=0.164, loss_pocket_to_mol=0.137, train_m2p_mrr=0.9772, train_m2p_top1=0.9656, train_m2p_top3=0.9866, train_m2p_top5=0.9928, ups=0.47, bsz=189.4, num_updates=100, lr=9.3633e-06, gnorm=0.203, clip=0, loss_scale=4, train_wall=210.73, gb_free=8.1, wall=230
+2026-07-04 15:09:56 | INFO | train_inner | epoch 001:    200 / 355 loss=0.156, loss_mol_to_pocket=0.156, loss_pocket_to_mol=0.133, train_m2p_mrr=0.979, train_m2p_top1=0.9688, train_m2p_top3=0.9872, train_m2p_top5=0.9921, ups=0.47, bsz=186.2, num_updates=200, lr=1.87266e-05, gnorm=0.198, clip=0, loss_scale=4, train_wall=213.64, gb_free=8.4, wall=445
+2026-07-04 15:13:33 | INFO | train_inner | epoch 001:    300 / 355 loss=0.156, loss_mol_to_pocket=0.156, loss_pocket_to_mol=0.127, train_m2p_mrr=0.9791, train_m2p_top1=0.9683, train_m2p_top3=0.9877, train_m2p_top5=0.9934, ups=0.46, bsz=184.7, num_updates=300, lr=2.80899e-05, gnorm=0.197, clip=0, loss_scale=8, train_wall=216.2, gb_free=8.3, wall=662
+2026-07-04 15:15:34 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 15:15:34 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 15:15:37 | INFO | valid | epoch 001 | valid on 'valid' subset | loss 1.278 | loss_mol_to_pocket 1.278 | loss_pocket_to_mol 1.464 | valid_m2p_mrr 0.8166 | valid_m2p_top1 0.7224 | valid_m2p_top3 0.9087 | valid_m2p_top5 0.9392 | bsz 263 | num_updates 355
+2026-07-04 15:15:37 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 1 @ 355 updates
+2026-07-04 15:15:37 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt
+2026-07-04 15:15:37 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt
+2026-07-04 15:15:37 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt (epoch 1 @ 355 updates, score 0.8166) (writing took 0.6928025698289275 seconds)
+2026-07-04 15:15:37 | INFO | unicore_cli.train | end of epoch 1 (average epoch stats below)
+2026-07-04 15:15:37 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint1.pt
+2026-07-04 15:15:37 | INFO | train | epoch 001 | loss 0.158 | loss_mol_to_pocket 0.158 | loss_pocket_to_mol 0.133 | train_m2p_mrr 0.9784 | train_m2p_top1 0.9674 | train_m2p_top3 0.987 | train_m2p_top5 0.9927 | ups 0.46 | bsz 186.4 | num_updates 355 | lr 3.32397e-05 | gnorm 0.199 | clip 0 | loss_scale 8 | train_wall 760.24 | gb_free 7.7 | wall 786
+2026-07-04 15:15:37 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 2
+2026-07-04 15:15:38 | INFO | unicore.trainer | begin training epoch 2
+2026-07-04 15:15:38 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 15:15:43 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 15:15:43 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 15:15:44 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint1.pt ...
+2026-07-04 15:15:44 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 15:17:16 | INFO | train_inner | epoch 002:     45 / 355 loss=0.155, loss_mol_to_pocket=0.155, loss_pocket_to_mol=0.13, train_m2p_mrr=0.9783, train_m2p_top1=0.9669, train_m2p_top3=0.9874, train_m2p_top5=0.9931, ups=0.45, bsz=186.4, num_updates=400, lr=3.74532e-05, gnorm=0.199, clip=0, loss_scale=8, train_wall=216.25, gb_free=8.3, wall=885
+2026-07-04 15:20:54 | INFO | train_inner | epoch 002:    145 / 355 loss=0.149, loss_mol_to_pocket=0.149, loss_pocket_to_mol=0.124, train_m2p_mrr=0.9806, train_m2p_top1=0.9714, train_m2p_top3=0.9872, train_m2p_top5=0.9924, ups=0.46, bsz=187, num_updates=500, lr=4.68165e-05, gnorm=0.186, clip=0, loss_scale=8, train_wall=216.08, gb_free=8.3, wall=1102
+2026-07-04 15:24:31 | INFO | train_inner | epoch 002:    245 / 355 loss=0.14, loss_mol_to_pocket=0.14, loss_pocket_to_mol=0.124, train_m2p_mrr=0.9801, train_m2p_top1=0.9692, train_m2p_top3=0.9897, train_m2p_top5=0.9947, ups=0.46, bsz=183.6, num_updates=600, lr=5.61798e-05, gnorm=0.187, clip=0, loss_scale=16, train_wall=216.03, gb_free=8.1, wall=1320
+2026-07-04 15:28:07 | INFO | train_inner | epoch 002:    345 / 355 loss=0.135, loss_mol_to_pocket=0.135, loss_pocket_to_mol=0.118, train_m2p_mrr=0.982, train_m2p_top1=0.9727, train_m2p_top3=0.9897, train_m2p_top5=0.9945, ups=0.46, bsz=187.6, num_updates=700, lr=6.55431e-05, gnorm=0.178, clip=0, loss_scale=16, train_wall=214.72, gb_free=8.2, wall=1536
+2026-07-04 15:28:29 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 15:28:29 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 15:28:32 | INFO | valid | epoch 002 | valid on 'valid' subset | loss 1.224 | loss_mol_to_pocket 1.224 | loss_pocket_to_mol 1.424 | valid_m2p_mrr 0.828 | valid_m2p_top1 0.7452 | valid_m2p_top3 0.9049 | valid_m2p_top5 0.9392 | bsz 263 | num_updates 710 | best_valid_m2p_mrr 0.828
+2026-07-04 15:28:32 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 2 @ 710 updates
+2026-07-04 15:28:32 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt
+2026-07-04 15:28:33 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt
+2026-07-04 15:28:33 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt (epoch 2 @ 710 updates, score 0.828) (writing took 0.6937730871140957 seconds)
+2026-07-04 15:28:33 | INFO | unicore_cli.train | end of epoch 2 (average epoch stats below)
+2026-07-04 15:28:33 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint2.pt
+2026-07-04 15:28:33 | INFO | train | epoch 002 | loss 0.143 | loss_mol_to_pocket 0.143 | loss_pocket_to_mol 0.123 | train_m2p_mrr 0.9807 | train_m2p_top1 0.9706 | train_m2p_top3 0.9889 | train_m2p_top5 0.9939 | ups 0.46 | bsz 186.4 | num_updates 710 | lr 6.64794e-05 | gnorm 0.185 | clip 0 | loss_scale 16 | train_wall 765.38 | gb_free 8.4 | wall 1561
+2026-07-04 15:28:33 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 3
+2026-07-04 15:28:33 | INFO | unicore.trainer | begin training epoch 3
+2026-07-04 15:28:33 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 15:28:37 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 15:28:38 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 15:28:39 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint2.pt ...
+2026-07-04 15:28:39 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 15:31:50 | INFO | train_inner | epoch 003:     90 / 355 loss=0.137, loss_mol_to_pocket=0.137, loss_pocket_to_mol=0.12, train_m2p_mrr=0.9811, train_m2p_top1=0.9706, train_m2p_top3=0.9903, train_m2p_top5=0.9951, ups=0.45, bsz=185.1, num_updates=800, lr=7.49064e-05, gnorm=0.179, clip=0, loss_scale=32, train_wall=215.92, gb_free=8.4, wall=1758
+2026-07-04 15:35:26 | INFO | train_inner | epoch 003:    190 / 355 loss=0.129, loss_mol_to_pocket=0.129, loss_pocket_to_mol=0.121, train_m2p_mrr=0.983, train_m2p_top1=0.9736, train_m2p_top3=0.9908, train_m2p_top5=0.9951, ups=0.46, bsz=186.6, num_updates=900, lr=8.42697e-05, gnorm=0.173, clip=0, loss_scale=32, train_wall=215.45, gb_free=8.3, wall=1975
+2026-07-04 15:39:05 | INFO | train_inner | epoch 003:    290 / 355 loss=0.125, loss_mol_to_pocket=0.125, loss_pocket_to_mol=0.108, train_m2p_mrr=0.9837, train_m2p_top1=0.975, train_m2p_top3=0.9912, train_m2p_top5=0.9951, ups=0.46, bsz=188.8, num_updates=1000, lr=9.3633e-05, gnorm=0.17, clip=0, loss_scale=32, train_wall=217.06, gb_free=8.1, wall=2194
+2026-07-04 15:41:27 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 15:41:27 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 15:41:30 | INFO | valid | epoch 003 | valid on 'valid' subset | loss 1.2 | loss_mol_to_pocket 1.2 | loss_pocket_to_mol 1.398 | valid_m2p_mrr 0.8334 | valid_m2p_top1 0.7529 | valid_m2p_top3 0.9125 | valid_m2p_top5 0.943 | bsz 263 | num_updates 1065 | best_valid_m2p_mrr 0.8334
+2026-07-04 15:41:30 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 3 @ 1065 updates
+2026-07-04 15:41:30 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt
+2026-07-04 15:41:30 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt
+2026-07-04 15:41:30 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt (epoch 3 @ 1065 updates, score 0.8334) (writing took 0.6762635298073292 seconds)
+2026-07-04 15:41:30 | INFO | unicore_cli.train | end of epoch 3 (average epoch stats below)
+2026-07-04 15:41:30 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint3.pt
+2026-07-04 15:41:30 | INFO | train | epoch 003 | loss 0.127 | loss_mol_to_pocket 0.127 | loss_pocket_to_mol 0.114 | train_m2p_mrr 0.9832 | train_m2p_top1 0.974 | train_m2p_top3 0.991 | train_m2p_top5 0.9953 | ups 0.46 | bsz 186.4 | num_updates 1065 | lr 9.97191e-05 | gnorm 0.172 | clip 0 | loss_scale 64 | train_wall 767.27 | gb_free 8.2 | wall 2339
+2026-07-04 15:41:30 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 4
+2026-07-04 15:41:31 | INFO | unicore.trainer | begin training epoch 4
+2026-07-04 15:41:31 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 15:41:35 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 15:41:36 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 15:41:36 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint3.pt ...
+2026-07-04 15:41:36 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 15:42:48 | INFO | train_inner | epoch 004:     35 / 353 loss=0.112, loss_mol_to_pocket=0.112, loss_pocket_to_mol=0.112, train_m2p_mrr=0.9854, train_m2p_top1=0.9773, train_m2p_top3=0.9925, train_m2p_top5=0.9966, ups=0.45, bsz=185.1, num_updates=1100, lr=9.98087e-05, gnorm=0.159, clip=0, loss_scale=64, train_wall=216.04, gb_free=8, wall=2416
+2026-07-04 15:46:24 | INFO | train_inner | epoch 004:    135 / 353 loss=0.124, loss_mol_to_pocket=0.124, loss_pocket_to_mol=0.113, train_m2p_mrr=0.9834, train_m2p_top1=0.9741, train_m2p_top3=0.9916, train_m2p_top5=0.9961, ups=0.46, bsz=185.2, num_updates=1200, lr=9.92111e-05, gnorm=0.166, clip=0, loss_scale=64, train_wall=215.55, gb_free=11.8, wall=2633
+2026-07-04 15:50:03 | INFO | train_inner | epoch 004:    235 / 353 loss=0.123, loss_mol_to_pocket=0.123, loss_pocket_to_mol=0.109, train_m2p_mrr=0.9832, train_m2p_top1=0.9733, train_m2p_top3=0.9916, train_m2p_top5=0.9958, ups=0.46, bsz=189.8, num_updates=1300, lr=9.86134e-05, gnorm=0.163, clip=0, loss_scale=128, train_wall=216.86, gb_free=8.2, wall=2852
+2026-07-04 15:53:38 | INFO | train_inner | epoch 004:    335 / 353 loss=0.125, loss_mol_to_pocket=0.125, loss_pocket_to_mol=0.112, train_m2p_mrr=0.9833, train_m2p_top1=0.9749, train_m2p_top3=0.9898, train_m2p_top5=0.9944, ups=0.46, bsz=187.1, num_updates=1400, lr=9.80158e-05, gnorm=0.166, clip=0, loss_scale=128, train_wall=214.11, gb_free=8.2, wall=3067
+2026-07-04 15:54:17 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 15:54:17 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 15:54:20 | INFO | valid | epoch 004 | valid on 'valid' subset | loss 1.173 | loss_mol_to_pocket 1.173 | loss_pocket_to_mol 1.361 | valid_m2p_mrr 0.8414 | valid_m2p_top1 0.7605 | valid_m2p_top3 0.9163 | valid_m2p_top5 0.9468 | bsz 263 | num_updates 1418 | best_valid_m2p_mrr 0.8414
+2026-07-04 15:54:20 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 4 @ 1418 updates
+2026-07-04 15:54:20 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt
+2026-07-04 15:54:21 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt
+2026-07-04 15:54:21 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt (epoch 4 @ 1418 updates, score 0.8414) (writing took 0.6753839389421046 seconds)
+2026-07-04 15:54:21 | INFO | unicore_cli.train | end of epoch 4 (average epoch stats below)
+2026-07-04 15:54:21 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint4.pt
+2026-07-04 15:54:21 | INFO | train | epoch 004 | loss 0.122 | loss_mol_to_pocket 0.122 | loss_pocket_to_mol 0.111 | train_m2p_mrr 0.9835 | train_m2p_top1 0.9744 | train_m2p_top3 0.9912 | train_m2p_top5 0.9956 | ups 0.46 | bsz 187.4 | num_updates 1418 | lr 9.79082e-05 | gnorm 0.164 | clip 0 | loss_scale 128 | train_wall 760.53 | gb_free 13.3 | wall 3110
+2026-07-04 15:54:21 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 5
+2026-07-04 15:54:22 | INFO | unicore.trainer | begin training epoch 5
+2026-07-04 15:54:22 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 15:54:26 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 15:54:26 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 15:54:27 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint4.pt ...
+2026-07-04 15:54:27 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 15:57:19 | INFO | train_inner | epoch 005:     82 / 355 loss=0.126, loss_mol_to_pocket=0.126, loss_pocket_to_mol=0.114, train_m2p_mrr=0.9834, train_m2p_top1=0.9745, train_m2p_top3=0.991, train_m2p_top5=0.9956, ups=0.45, bsz=184.3, num_updates=1500, lr=9.74181e-05, gnorm=0.171, clip=0, loss_scale=128, train_wall=215.04, gb_free=8.4, wall=3288
+2026-07-04 16:00:58 | INFO | train_inner | epoch 005:    182 / 355 loss=0.116, loss_mol_to_pocket=0.116, loss_pocket_to_mol=0.104, train_m2p_mrr=0.9856, train_m2p_top1=0.9781, train_m2p_top3=0.9919, train_m2p_top5=0.9957, ups=0.46, bsz=189.3, num_updates=1600, lr=9.68205e-05, gnorm=0.158, clip=0, loss_scale=256, train_wall=217.49, gb_free=8.4, wall=3507
+2026-07-04 16:04:38 | INFO | train_inner | epoch 005:    282 / 355 loss=0.112, loss_mol_to_pocket=0.112, loss_pocket_to_mol=0.097, train_m2p_mrr=0.9857, train_m2p_top1=0.9786, train_m2p_top3=0.991, train_m2p_top5=0.9956, ups=0.46, bsz=185.7, num_updates=1700, lr=9.62228e-05, gnorm=0.157, clip=0, loss_scale=256, train_wall=218.18, gb_free=8.2, wall=3727
+2026-07-04 16:07:15 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 16:07:15 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 16:07:18 | INFO | valid | epoch 005 | valid on 'valid' subset | loss 1.17 | loss_mol_to_pocket 1.17 | loss_pocket_to_mol 1.354 | valid_m2p_mrr 0.8444 | valid_m2p_top1 0.7643 | valid_m2p_top3 0.9202 | valid_m2p_top5 0.9468 | bsz 263 | num_updates 1773 | best_valid_m2p_mrr 0.8444
+2026-07-04 16:07:18 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 5 @ 1773 updates
+2026-07-04 16:07:18 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt
+2026-07-04 16:07:19 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt
+2026-07-04 16:07:19 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt (epoch 5 @ 1773 updates, score 0.8444) (writing took 0.6792543018236756 seconds)
+2026-07-04 16:07:19 | INFO | unicore_cli.train | end of epoch 5 (average epoch stats below)
+2026-07-04 16:07:19 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint5.pt
+2026-07-04 16:07:19 | INFO | train | epoch 005 | loss 0.116 | loss_mol_to_pocket 0.116 | loss_pocket_to_mol 0.104 | train_m2p_mrr 0.985 | train_m2p_top1 0.9771 | train_m2p_top3 0.9914 | train_m2p_top5 0.9958 | ups 0.46 | bsz 186.4 | num_updates 1773 | lr 9.57865e-05 | gnorm 0.161 | clip 0 | loss_scale 256 | train_wall 768.1 | gb_free 8.4 | wall 3887
+2026-07-04 16:07:19 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 6
+2026-07-04 16:07:19 | INFO | unicore.trainer | begin training epoch 6
+2026-07-04 16:07:19 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 16:07:24 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 16:07:24 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 16:07:25 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint5.pt ...
+2026-07-04 16:07:25 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 16:08:18 | INFO | train_inner | epoch 006:     27 / 356 loss=0.106, loss_mol_to_pocket=0.106, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9857, train_m2p_top1=0.9773, train_m2p_top3=0.9928, train_m2p_top5=0.9969, ups=0.45, bsz=185.4, num_updates=1800, lr=9.56251e-05, gnorm=0.151, clip=0, loss_scale=512, train_wall=214.13, gb_free=8.3, wall=3947
+2026-07-04 16:11:56 | INFO | train_inner | epoch 006:    127 / 356 loss=0.112, loss_mol_to_pocket=0.112, loss_pocket_to_mol=0.105, train_m2p_mrr=0.9855, train_m2p_top1=0.9774, train_m2p_top3=0.9928, train_m2p_top5=0.9967, ups=0.46, bsz=184.4, num_updates=1900, lr=9.50275e-05, gnorm=0.152, clip=0, loss_scale=512, train_wall=216.17, gb_free=8.4, wall=4165
+2026-07-04 16:15:34 | INFO | train_inner | epoch 006:    227 / 356 loss=0.111, loss_mol_to_pocket=0.111, loss_pocket_to_mol=0.102, train_m2p_mrr=0.9847, train_m2p_top1=0.9761, train_m2p_top3=0.992, train_m2p_top5=0.9964, ups=0.46, bsz=189.3, num_updates=2000, lr=9.44298e-05, gnorm=0.149, clip=0, loss_scale=512, train_wall=216.23, gb_free=8.4, wall=4382
+2026-07-04 16:19:12 | INFO | train_inner | epoch 006:    327 / 356 loss=0.107, loss_mol_to_pocket=0.107, loss_pocket_to_mol=0.098, train_m2p_mrr=0.9862, train_m2p_top1=0.9784, train_m2p_top3=0.9922, train_m2p_top5=0.9965, ups=0.46, bsz=185.5, num_updates=2100, lr=9.38322e-05, gnorm=0.148, clip=0, loss_scale=1024, train_wall=216.77, gb_free=8.2, wall=4601
+2026-07-04 16:20:15 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 16:20:15 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 16:20:18 | INFO | valid | epoch 006 | valid on 'valid' subset | loss 1.145 | loss_mol_to_pocket 1.145 | loss_pocket_to_mol 1.337 | valid_m2p_mrr 0.8473 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.9278 | valid_m2p_top5 0.9506 | bsz 263 | num_updates 2129 | best_valid_m2p_mrr 0.8473
+2026-07-04 16:20:18 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 6 @ 2129 updates
+2026-07-04 16:20:18 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt
+2026-07-04 16:20:18 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt
+2026-07-04 16:20:18 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt (epoch 6 @ 2129 updates, score 0.8473) (writing took 0.7044221041724086 seconds)
+2026-07-04 16:20:18 | INFO | unicore_cli.train | end of epoch 6 (average epoch stats below)
+2026-07-04 16:20:18 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint6.pt
+2026-07-04 16:20:18 | INFO | train | epoch 006 | loss 0.11 | loss_mol_to_pocket 0.11 | loss_pocket_to_mol 0.102 | train_m2p_mrr 0.9855 | train_m2p_top1 0.9772 | train_m2p_top3 0.9925 | train_m2p_top5 0.9966 | ups 0.46 | bsz 185.9 | num_updates 2129 | lr 9.36589e-05 | gnorm 0.15 | clip 0 | loss_scale 1024 | train_wall 769.72 | gb_free 8.4 | wall 4667
+2026-07-04 16:20:18 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 7
+2026-07-04 16:20:19 | INFO | unicore.trainer | begin training epoch 7
+2026-07-04 16:20:19 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 16:20:23 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 16:20:24 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 16:20:25 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint6.pt ...
+2026-07-04 16:20:25 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint1.pt
+2026-07-04 16:20:25 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 16:22:56 | INFO | train_inner | epoch 007:     71 / 355 loss=0.112, loss_mol_to_pocket=0.112, loss_pocket_to_mol=0.104, train_m2p_mrr=0.9854, train_m2p_top1=0.9767, train_m2p_top3=0.9932, train_m2p_top5=0.9972, ups=0.45, bsz=185.5, num_updates=2200, lr=9.32345e-05, gnorm=0.156, clip=0, loss_scale=1024, train_wall=216.84, gb_free=8.1, wall=4824
+2026-07-04 16:26:33 | INFO | train_inner | epoch 007:    171 / 355 loss=0.108, loss_mol_to_pocket=0.108, loss_pocket_to_mol=0.097, train_m2p_mrr=0.9858, train_m2p_top1=0.978, train_m2p_top3=0.9927, train_m2p_top5=0.996, ups=0.46, bsz=185.5, num_updates=2300, lr=9.26369e-05, gnorm=0.15, clip=0, loss_scale=1024, train_wall=215.79, gb_free=8, wall=5042
+2026-07-04 16:30:08 | INFO | train_inner | epoch 007:    271 / 355 loss=0.107, loss_mol_to_pocket=0.107, loss_pocket_to_mol=0.099, train_m2p_mrr=0.9861, train_m2p_top1=0.9779, train_m2p_top3=0.9935, train_m2p_top5=0.997, ups=0.46, bsz=184.7, num_updates=2400, lr=9.20392e-05, gnorm=0.15, clip=0, loss_scale=2048, train_wall=213.99, gb_free=7.8, wall=5257
+2026-07-04 16:33:11 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 16:33:11 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 16:33:14 | INFO | valid | epoch 007 | valid on 'valid' subset | loss 1.141 | loss_mol_to_pocket 1.141 | loss_pocket_to_mol 1.331 | valid_m2p_mrr 0.8473 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.924 | valid_m2p_top5 0.943 | bsz 263 | num_updates 2484 | best_valid_m2p_mrr 0.8473
+2026-07-04 16:33:14 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 7 @ 2484 updates
+2026-07-04 16:33:14 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt
+2026-07-04 16:33:15 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt
+2026-07-04 16:33:15 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt (epoch 7 @ 2484 updates, score 0.8473) (writing took 0.6730348449200392 seconds)
+2026-07-04 16:33:15 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint7.pt
+2026-07-04 16:33:15 | INFO | unicore_cli.train | end of epoch 7 (average epoch stats below)
+2026-07-04 16:33:15 | INFO | train | epoch 007 | loss 0.108 | loss_mol_to_pocket 0.108 | loss_pocket_to_mol 0.098 | train_m2p_mrr 0.986 | train_m2p_top1 0.9779 | train_m2p_top3 0.9931 | train_m2p_top5 0.9969 | ups 0.46 | bsz 186.4 | num_updates 2484 | lr 9.15372e-05 | gnorm 0.151 | clip 0 | loss_scale 2048 | train_wall 765.92 | gb_free 8.3 | wall 5444
+2026-07-04 16:33:15 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 8
+2026-07-04 16:33:16 | INFO | unicore.trainer | begin training epoch 8
+2026-07-04 16:33:16 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 16:33:20 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 16:33:21 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 16:33:22 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint7.pt ...
+2026-07-04 16:33:22 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint2.pt
+2026-07-04 16:33:22 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 16:33:52 | INFO | train_inner | epoch 008:     16 / 355 loss=0.106, loss_mol_to_pocket=0.106, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9861, train_m2p_top1=0.9783, train_m2p_top3=0.9926, train_m2p_top5=0.997, ups=0.45, bsz=189.8, num_updates=2500, lr=9.14415e-05, gnorm=0.15, clip=0, loss_scale=2048, train_wall=216.97, gb_free=7.8, wall=5480
+2026-07-04 16:37:29 | INFO | train_inner | epoch 008:    116 / 355 loss=0.098, loss_mol_to_pocket=0.098, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9876, train_m2p_top1=0.9796, train_m2p_top3=0.995, train_m2p_top5=0.9983, ups=0.46, bsz=184.4, num_updates=2600, lr=9.08439e-05, gnorm=0.141, clip=0, loss_scale=4096, train_wall=215.5, gb_free=8, wall=5697
+2026-07-04 16:41:06 | INFO | train_inner | epoch 008:    216 / 355 loss=0.108, loss_mol_to_pocket=0.108, loss_pocket_to_mol=0.098, train_m2p_mrr=0.9865, train_m2p_top1=0.979, train_m2p_top3=0.9924, train_m2p_top5=0.996, ups=0.46, bsz=188.9, num_updates=2700, lr=9.02462e-05, gnorm=0.15, clip=0, loss_scale=4096, train_wall=215.86, gb_free=8.3, wall=5915
+2026-07-04 16:44:42 | INFO | train_inner | epoch 008:    316 / 355 loss=0.099, loss_mol_to_pocket=0.099, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9878, train_m2p_top1=0.9812, train_m2p_top3=0.9932, train_m2p_top5=0.9973, ups=0.46, bsz=184.3, num_updates=2800, lr=8.96486e-05, gnorm=0.137, clip=0, loss_scale=4096, train_wall=215.08, gb_free=8.5, wall=6131
+2026-07-04 16:45:21 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 16:46:07 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 16:46:07 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 16:46:10 | INFO | valid | epoch 008 | valid on 'valid' subset | loss 1.136 | loss_mol_to_pocket 1.136 | loss_pocket_to_mol 1.323 | valid_m2p_mrr 0.8491 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.924 | valid_m2p_top5 0.9506 | bsz 263 | num_updates 2838 | best_valid_m2p_mrr 0.8491
+2026-07-04 16:46:10 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 8 @ 2838 updates
+2026-07-04 16:46:10 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt
+2026-07-04 16:46:11 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt
+2026-07-04 16:46:11 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt (epoch 8 @ 2838 updates, score 0.8491) (writing took 0.6852758540771902 seconds)
+2026-07-04 16:46:11 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint8.pt
+2026-07-04 16:46:11 | INFO | unicore_cli.train | end of epoch 8 (average epoch stats below)
+2026-07-04 16:46:11 | INFO | train | epoch 008 | loss 0.1 | loss_mol_to_pocket 0.1 | loss_pocket_to_mol 0.095 | train_m2p_mrr 0.9875 | train_m2p_top1 0.9803 | train_m2p_top3 0.9936 | train_m2p_top5 0.9971 | ups 0.46 | bsz 186.4 | num_updates 2838 | lr 8.94215e-05 | gnorm 0.141 | clip 0 | loss_scale 4096 | train_wall 765.8 | gb_free 8.3 | wall 6220
+2026-07-04 16:46:11 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 9
+2026-07-04 16:46:12 | INFO | unicore.trainer | begin training epoch 9
+2026-07-04 16:46:12 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 16:46:16 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 16:46:17 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 16:46:17 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint8.pt ...
+2026-07-04 16:46:17 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint3.pt
+2026-07-04 16:46:17 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 16:48:26 | INFO | train_inner | epoch 009:     62 / 356 loss=0.101, loss_mol_to_pocket=0.101, loss_pocket_to_mol=0.092, train_m2p_mrr=0.987, train_m2p_top1=0.9797, train_m2p_top3=0.9932, train_m2p_top5=0.9967, ups=0.45, bsz=187.4, num_updates=2900, lr=8.90509e-05, gnorm=0.143, clip=0, loss_scale=4096, train_wall=216.45, gb_free=8.2, wall=6354
+2026-07-04 16:52:03 | INFO | train_inner | epoch 009:    162 / 356 loss=0.095, loss_mol_to_pocket=0.095, loss_pocket_to_mol=0.089, train_m2p_mrr=0.988, train_m2p_top1=0.9812, train_m2p_top3=0.994, train_m2p_top5=0.9973, ups=0.46, bsz=186.9, num_updates=3000, lr=8.84533e-05, gnorm=0.139, clip=0, loss_scale=4096, train_wall=216.44, gb_free=8.5, wall=6572
+2026-07-04 16:54:46 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 16:55:46 | INFO | train_inner | epoch 009:    263 / 356 loss=0.101, loss_mol_to_pocket=0.101, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9873, train_m2p_top1=0.9799, train_m2p_top3=0.9937, train_m2p_top5=0.9973, ups=0.45, bsz=186.2, num_updates=3100, lr=8.78556e-05, gnorm=0.144, clip=0, loss_scale=4096, train_wall=221.37, gb_free=8.3, wall=6795
+2026-07-04 16:59:08 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 16:59:08 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 16:59:11 | INFO | valid | epoch 009 | valid on 'valid' subset | loss 1.127 | loss_mol_to_pocket 1.127 | loss_pocket_to_mol 1.308 | valid_m2p_mrr 0.8485 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.924 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 3193 | best_valid_m2p_mrr 0.8491
+2026-07-04 16:59:11 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 9 @ 3193 updates
+2026-07-04 16:59:11 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint9.pt
+2026-07-04 16:59:12 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint9.pt
+2026-07-04 16:59:12 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint9.pt (epoch 9 @ 3193 updates, score 0.8485) (writing took 0.6950146430172026 seconds)
+2026-07-04 16:59:12 | INFO | unicore_cli.train | end of epoch 9 (average epoch stats below)
+2026-07-04 16:59:12 | INFO | train | epoch 009 | loss 0.101 | loss_mol_to_pocket 0.101 | loss_pocket_to_mol 0.094 | train_m2p_mrr 0.9869 | train_m2p_top1 0.9796 | train_m2p_top3 0.9933 | train_m2p_top5 0.9969 | ups 0.45 | bsz 185.8 | num_updates 3193 | lr 8.72998e-05 | gnorm 0.144 | clip 0 | loss_scale 4096 | train_wall 770.48 | gb_free 8.3 | wall 7001
+2026-07-04 16:59:12 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint9.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint9.pt
+2026-07-04 16:59:12 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 10
+2026-07-04 16:59:12 | INFO | unicore.trainer | begin training epoch 10
+2026-07-04 16:59:12 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 16:59:17 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint9.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 16:59:17 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint9.pt ...
+2026-07-04 16:59:17 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint4.pt
+2026-07-04 16:59:17 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 16:59:28 | INFO | train_inner | epoch 010:      7 / 354 loss=0.102, loss_mol_to_pocket=0.102, loss_pocket_to_mol=0.094, train_m2p_mrr=0.9864, train_m2p_top1=0.9792, train_m2p_top3=0.9927, train_m2p_top5=0.9962, ups=0.45, bsz=183.4, num_updates=3200, lr=8.72579e-05, gnorm=0.144, clip=0, loss_scale=4096, train_wall=215.66, gb_free=8.3, wall=7017
+2026-07-04 17:03:05 | INFO | train_inner | epoch 010:    107 / 354 loss=0.1, loss_mol_to_pocket=0.1, loss_pocket_to_mol=0.092, train_m2p_mrr=0.9873, train_m2p_top1=0.9806, train_m2p_top3=0.9928, train_m2p_top5=0.9965, ups=0.46, bsz=189, num_updates=3300, lr=8.66603e-05, gnorm=0.139, clip=0, loss_scale=4096, train_wall=215.61, gb_free=8.4, wall=7234
+2026-07-04 17:04:20 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 17:06:47 | INFO | train_inner | epoch 010:    208 / 354 loss=0.099, loss_mol_to_pocket=0.099, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9872, train_m2p_top1=0.9796, train_m2p_top3=0.9939, train_m2p_top5=0.9977, ups=0.45, bsz=186.7, num_updates=3400, lr=8.60626e-05, gnorm=0.139, clip=0, loss_scale=4096, train_wall=219.67, gb_free=8.4, wall=7455
+2026-07-04 17:10:24 | INFO | train_inner | epoch 010:    308 / 354 loss=0.1, loss_mol_to_pocket=0.1, loss_pocket_to_mol=0.091, train_m2p_mrr=0.9873, train_m2p_top1=0.9804, train_m2p_top3=0.9925, train_m2p_top5=0.9969, ups=0.46, bsz=187.2, num_updates=3500, lr=8.5465e-05, gnorm=0.147, clip=0, loss_scale=4096, train_wall=215.54, gb_free=8.3, wall=7672
+2026-07-04 17:12:03 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 17:12:03 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 17:12:06 | INFO | valid | epoch 010 | valid on 'valid' subset | loss 1.118 | loss_mol_to_pocket 1.118 | loss_pocket_to_mol 1.298 | valid_m2p_mrr 0.8537 | valid_m2p_top1 0.7719 | valid_m2p_top3 0.9278 | valid_m2p_top5 0.9582 | bsz 263 | num_updates 3546 | best_valid_m2p_mrr 0.8537
+2026-07-04 17:12:06 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 10 @ 3546 updates
+2026-07-04 17:12:06 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt
+2026-07-04 17:12:07 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt
+2026-07-04 17:12:07 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt (epoch 10 @ 3546 updates, score 0.8537) (writing took 0.699259553104639 seconds)
+2026-07-04 17:12:07 | INFO | unicore_cli.train | end of epoch 10 (average epoch stats below)
+2026-07-04 17:12:07 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint10.pt
+2026-07-04 17:12:07 | INFO | train | epoch 010 | loss 0.099 | loss_mol_to_pocket 0.099 | loss_pocket_to_mol 0.094 | train_m2p_mrr 0.9872 | train_m2p_top1 0.9799 | train_m2p_top3 0.9933 | train_m2p_top5 0.9971 | ups 0.46 | bsz 186.9 | num_updates 3546 | lr 8.51901e-05 | gnorm 0.14 | clip 0 | loss_scale 4096 | train_wall 764.9 | gb_free 13.9 | wall 7776
+2026-07-04 17:12:07 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 11
+2026-07-04 17:12:07 | INFO | unicore.trainer | begin training epoch 11
+2026-07-04 17:12:07 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 17:12:12 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 17:12:12 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 17:12:13 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint10.pt ...
+2026-07-04 17:12:13 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint5.pt
+2026-07-04 17:12:13 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 17:13:43 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 17:14:06 | INFO | train_inner | epoch 011:     55 / 355 loss=0.099, loss_mol_to_pocket=0.099, loss_pocket_to_mol=0.097, train_m2p_mrr=0.9869, train_m2p_top1=0.9786, train_m2p_top3=0.9942, train_m2p_top5=0.9975, ups=0.45, bsz=182.6, num_updates=3600, lr=8.48673e-05, gnorm=0.14, clip=0, loss_scale=4096, train_wall=216.33, gb_free=8, wall=7895
+2026-07-04 17:17:43 | INFO | train_inner | epoch 011:    155 / 355 loss=0.101, loss_mol_to_pocket=0.101, loss_pocket_to_mol=0.098, train_m2p_mrr=0.9871, train_m2p_top1=0.9799, train_m2p_top3=0.9934, train_m2p_top5=0.997, ups=0.46, bsz=188.2, num_updates=3700, lr=8.42697e-05, gnorm=0.136, clip=0, loss_scale=4096, train_wall=215.14, gb_free=8.4, wall=8112
+2026-07-04 17:21:18 | INFO | train_inner | epoch 011:    255 / 355 loss=0.1, loss_mol_to_pocket=0.1, loss_pocket_to_mol=0.095, train_m2p_mrr=0.9869, train_m2p_top1=0.9792, train_m2p_top3=0.9939, train_m2p_top5=0.9972, ups=0.46, bsz=185.4, num_updates=3800, lr=8.3672e-05, gnorm=0.141, clip=0, loss_scale=4096, train_wall=214.15, gb_free=8.5, wall=8327
+2026-07-04 17:23:05 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 17:24:56 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 17:24:56 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 17:24:59 | INFO | valid | epoch 011 | valid on 'valid' subset | loss 1.118 | loss_mol_to_pocket 1.118 | loss_pocket_to_mol 1.3 | valid_m2p_mrr 0.8558 | valid_m2p_top1 0.7757 | valid_m2p_top3 0.9278 | valid_m2p_top5 0.9582 | bsz 263 | num_updates 3899 | best_valid_m2p_mrr 0.8558
+2026-07-04 17:24:59 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 11 @ 3899 updates
+2026-07-04 17:24:59 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt
+2026-07-04 17:25:00 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt
+2026-07-04 17:25:00 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt (epoch 11 @ 3899 updates, score 0.8558) (writing took 0.7070986656472087 seconds)
+2026-07-04 17:25:00 | INFO | unicore_cli.train | end of epoch 11 (average epoch stats below)
+2026-07-04 17:25:00 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint11.pt
+2026-07-04 17:25:00 | INFO | train | epoch 011 | loss 0.1 | loss_mol_to_pocket 0.1 | loss_pocket_to_mol 0.096 | train_m2p_mrr 0.9872 | train_m2p_top1 0.9797 | train_m2p_top3 0.9936 | train_m2p_top5 0.9971 | ups 0.46 | bsz 186.6 | num_updates 3899 | lr 8.30803e-05 | gnorm 0.141 | clip 0 | loss_scale 4096 | train_wall 763.28 | gb_free 8.4 | wall 8549
+2026-07-04 17:25:00 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 12
+2026-07-04 17:25:01 | INFO | unicore.trainer | begin training epoch 12
+2026-07-04 17:25:01 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 17:25:03 | INFO | train_inner | epoch 012:      1 / 355 loss=0.097, loss_mol_to_pocket=0.097, loss_pocket_to_mol=0.096, train_m2p_mrr=0.9877, train_m2p_top1=0.9807, train_m2p_top3=0.9934, train_m2p_top5=0.9967, ups=0.44, bsz=188.5, num_updates=3900, lr=8.30743e-05, gnorm=0.139, clip=0, loss_scale=4096, train_wall=218.7, gb_free=8.2, wall=8552
+2026-07-04 17:25:05 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_best.pt
+2026-07-04 17:25:05 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 17:25:06 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint11.pt ...
+2026-07-04 17:25:06 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint6.pt
+2026-07-04 17:25:06 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 17:28:39 | INFO | train_inner | epoch 012:    101 / 355 loss=0.101, loss_mol_to_pocket=0.101, loss_pocket_to_mol=0.099, train_m2p_mrr=0.9867, train_m2p_top1=0.9788, train_m2p_top3=0.9942, train_m2p_top5=0.9974, ups=0.46, bsz=185.4, num_updates=4000, lr=8.24767e-05, gnorm=0.142, clip=0, loss_scale=4096, train_wall=214.06, gb_free=8.2, wall=8768
+2026-07-04 17:32:14 | INFO | train_inner | epoch 012:    201 / 355 loss=0.098, loss_mol_to_pocket=0.098, loss_pocket_to_mol=0.091, train_m2p_mrr=0.9872, train_m2p_top1=0.9796, train_m2p_top3=0.9936, train_m2p_top5=0.9974, ups=0.47, bsz=187, num_updates=4100, lr=8.1879e-05, gnorm=0.138, clip=0, loss_scale=4096, train_wall=213.48, gb_free=8.3, wall=8983
+2026-07-04 17:32:29 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 17:35:52 | INFO | train_inner | epoch 012:    302 / 355 loss=0.094, loss_mol_to_pocket=0.094, loss_pocket_to_mol=0.087, train_m2p_mrr=0.988, train_m2p_top1=0.9812, train_m2p_top3=0.9936, train_m2p_top5=0.9973, ups=0.46, bsz=187, num_updates=4200, lr=8.12814e-05, gnorm=0.131, clip=0, loss_scale=4096, train_wall=216.55, gb_free=8.3, wall=9201
+2026-07-04 17:37:45 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 17:37:45 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 17:37:48 | INFO | valid | epoch 012 | valid on 'valid' subset | loss 1.118 | loss_mol_to_pocket 1.118 | loss_pocket_to_mol 1.289 | valid_m2p_mrr 0.8512 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.9278 | valid_m2p_top5 0.9582 | bsz 263 | num_updates 4253 | best_valid_m2p_mrr 0.8558
+2026-07-04 17:37:48 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 12 @ 4253 updates
+2026-07-04 17:37:48 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint12.pt
+2026-07-04 17:37:49 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint12.pt
+2026-07-04 17:37:49 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint12.pt (epoch 12 @ 4253 updates, score 0.8512) (writing took 0.6823310949839652 seconds)
+2026-07-04 17:37:49 | INFO | unicore_cli.train | end of epoch 12 (average epoch stats below)
+2026-07-04 17:37:49 | INFO | train | epoch 012 | loss 0.097 | loss_mol_to_pocket 0.097 | loss_pocket_to_mol 0.093 | train_m2p_mrr 0.9873 | train_m2p_top1 0.9798 | train_m2p_top3 0.9939 | train_m2p_top5 0.9974 | ups 0.46 | bsz 186.4 | num_updates 4253 | lr 8.09646e-05 | gnorm 0.138 | clip 0 | loss_scale 4096 | train_wall 759.13 | gb_free 8.1 | wall 9318
+2026-07-04 17:37:49 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint12.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint12.pt
+2026-07-04 17:37:49 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 13
+2026-07-04 17:37:50 | INFO | unicore.trainer | begin training epoch 13
+2026-07-04 17:37:50 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 17:37:54 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint12.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 17:37:55 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint12.pt ...
+2026-07-04 17:37:55 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint7.pt
+2026-07-04 17:37:55 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 17:39:31 | INFO | train_inner | epoch 013:     47 / 353 loss=0.091, loss_mol_to_pocket=0.091, loss_pocket_to_mol=0.094, train_m2p_mrr=0.9889, train_m2p_top1=0.9822, train_m2p_top3=0.995, train_m2p_top5=0.9979, ups=0.46, bsz=186.4, num_updates=4300, lr=8.06837e-05, gnorm=0.132, clip=0, loss_scale=4096, train_wall=212.47, gb_free=8.4, wall=9420
+2026-07-04 17:41:49 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 17:43:10 | INFO | train_inner | epoch 013:    148 / 353 loss=0.096, loss_mol_to_pocket=0.096, loss_pocket_to_mol=0.098, train_m2p_mrr=0.9882, train_m2p_top1=0.9809, train_m2p_top3=0.9952, train_m2p_top5=0.9977, ups=0.46, bsz=187.7, num_updates=4400, lr=8.00861e-05, gnorm=0.137, clip=0, loss_scale=4096, train_wall=217.82, gb_free=8.2, wall=9639
+2026-07-04 17:46:48 | INFO | train_inner | epoch 013:    248 / 353 loss=0.093, loss_mol_to_pocket=0.093, loss_pocket_to_mol=0.097, train_m2p_mrr=0.989, train_m2p_top1=0.9824, train_m2p_top3=0.9952, train_m2p_top5=0.9975, ups=0.46, bsz=188.8, num_updates=4500, lr=7.94884e-05, gnorm=0.132, clip=0, loss_scale=4096, train_wall=216.64, gb_free=8.4, wall=9857
+2026-07-04 17:50:24 | INFO | train_inner | epoch 013:    348 / 353 loss=0.089, loss_mol_to_pocket=0.089, loss_pocket_to_mol=0.086, train_m2p_mrr=0.9891, train_m2p_top1=0.9831, train_m2p_top3=0.9937, train_m2p_top5=0.9976, ups=0.46, bsz=185.7, num_updates=4600, lr=7.88907e-05, gnorm=0.132, clip=0, loss_scale=4096, train_wall=214.42, gb_free=8.3, wall=10073
+2026-07-04 17:50:35 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 17:50:35 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 17:50:38 | INFO | valid | epoch 013 | valid on 'valid' subset | loss 1.118 | loss_mol_to_pocket 1.118 | loss_pocket_to_mol 1.295 | valid_m2p_mrr 0.8475 | valid_m2p_top1 0.7605 | valid_m2p_top3 0.9278 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 4605 | best_valid_m2p_mrr 0.8558
+2026-07-04 17:50:38 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 13 @ 4605 updates
+2026-07-04 17:50:38 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint13.pt
+2026-07-04 17:50:38 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint13.pt
+2026-07-04 17:50:38 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint13.pt (epoch 13 @ 4605 updates, score 0.8475) (writing took 0.6861607739701867 seconds)
+2026-07-04 17:50:38 | INFO | unicore_cli.train | end of epoch 13 (average epoch stats below)
+2026-07-04 17:50:38 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint13.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint13.pt
+2026-07-04 17:50:38 | INFO | train | epoch 013 | loss 0.092 | loss_mol_to_pocket 0.092 | loss_pocket_to_mol 0.093 | train_m2p_mrr 0.989 | train_m2p_top1 0.9826 | train_m2p_top3 0.9948 | train_m2p_top5 0.9977 | ups 0.46 | bsz 187.4 | num_updates 4605 | lr 7.88609e-05 | gnorm 0.132 | clip 0 | loss_scale 4096 | train_wall 759.16 | gb_free 8.3 | wall 10087
+2026-07-04 17:50:38 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 14
+2026-07-04 17:50:39 | INFO | unicore.trainer | begin training epoch 14
+2026-07-04 17:50:39 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 17:50:43 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint13.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 17:50:44 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint13.pt ...
+2026-07-04 17:50:44 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint8.pt
+2026-07-04 17:50:44 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 17:51:18 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 17:54:07 | INFO | train_inner | epoch 014:     96 / 354 loss=0.092, loss_mol_to_pocket=0.092, loss_pocket_to_mol=0.089, train_m2p_mrr=0.9885, train_m2p_top1=0.9819, train_m2p_top3=0.9941, train_m2p_top5=0.9976, ups=0.45, bsz=186.7, num_updates=4700, lr=7.82931e-05, gnorm=0.127, clip=0, loss_scale=4096, train_wall=216.68, gb_free=8.2, wall=10296
+2026-07-04 17:57:42 | INFO | train_inner | epoch 014:    196 / 354 loss=0.1, loss_mol_to_pocket=0.1, loss_pocket_to_mol=0.097, train_m2p_mrr=0.9876, train_m2p_top1=0.9801, train_m2p_top3=0.9939, train_m2p_top5=0.9978, ups=0.46, bsz=185.2, num_updates=4800, lr=7.76954e-05, gnorm=0.143, clip=0, loss_scale=4096, train_wall=214.03, gb_free=8.3, wall=10511
+2026-07-04 18:00:38 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:01:22 | INFO | train_inner | epoch 014:    297 / 354 loss=0.101, loss_mol_to_pocket=0.101, loss_pocket_to_mol=0.094, train_m2p_mrr=0.986, train_m2p_top1=0.9783, train_m2p_top3=0.9916, train_m2p_top5=0.9967, ups=0.46, bsz=187.6, num_updates=4900, lr=7.70978e-05, gnorm=0.144, clip=0, loss_scale=4096, train_wall=218.04, gb_free=8.5, wall=10731
+2026-07-04 18:03:25 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 18:03:25 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 18:03:28 | INFO | valid | epoch 014 | valid on 'valid' subset | loss 1.113 | loss_mol_to_pocket 1.113 | loss_pocket_to_mol 1.288 | valid_m2p_mrr 0.8513 | valid_m2p_top1 0.7643 | valid_m2p_top3 0.9354 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 4957 | best_valid_m2p_mrr 0.8558
+2026-07-04 18:03:28 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 14 @ 4957 updates
+2026-07-04 18:03:28 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint14.pt
+2026-07-04 18:03:29 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint14.pt
+2026-07-04 18:03:29 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint14.pt (epoch 14 @ 4957 updates, score 0.8513) (writing took 0.6914283838123083 seconds)
+2026-07-04 18:03:29 | INFO | unicore_cli.train | end of epoch 14 (average epoch stats below)
+2026-07-04 18:03:29 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint14.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint14.pt
+2026-07-04 18:03:29 | INFO | train | epoch 014 | loss 0.097 | loss_mol_to_pocket 0.097 | loss_pocket_to_mol 0.094 | train_m2p_mrr 0.9876 | train_m2p_top1 0.9805 | train_m2p_top3 0.9933 | train_m2p_top5 0.9975 | ups 0.46 | bsz 187 | num_updates 4957 | lr 7.67571e-05 | gnorm 0.138 | clip 0 | loss_scale 4096 | train_wall 760.65 | gb_free 8.4 | wall 10858
+2026-07-04 18:03:29 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 15
+2026-07-04 18:03:29 | INFO | unicore.trainer | begin training epoch 15
+2026-07-04 18:03:29 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 18:03:34 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint14.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 18:03:35 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint14.pt ...
+2026-07-04 18:03:35 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint9.pt
+2026-07-04 18:03:35 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 18:05:01 | INFO | train_inner | epoch 015:     43 / 355 loss=0.091, loss_mol_to_pocket=0.091, loss_pocket_to_mol=0.092, train_m2p_mrr=0.9886, train_m2p_top1=0.9818, train_m2p_top3=0.9943, train_m2p_top5=0.998, ups=0.46, bsz=188.9, num_updates=5000, lr=7.65001e-05, gnorm=0.133, clip=0, loss_scale=4096, train_wall=213.28, gb_free=8.3, wall=10950
+2026-07-04 18:08:37 | INFO | train_inner | epoch 015:    143 / 355 loss=0.087, loss_mol_to_pocket=0.087, loss_pocket_to_mol=0.081, train_m2p_mrr=0.9896, train_m2p_top1=0.9837, train_m2p_top3=0.9947, train_m2p_top5=0.9978, ups=0.46, bsz=190.3, num_updates=5100, lr=7.59025e-05, gnorm=0.128, clip=0, loss_scale=4096, train_wall=214.3, gb_free=8.2, wall=11166
+2026-07-04 18:09:58 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:12:14 | INFO | train_inner | epoch 015:    244 / 355 loss=0.093, loss_mol_to_pocket=0.093, loss_pocket_to_mol=0.091, train_m2p_mrr=0.9888, train_m2p_top1=0.9824, train_m2p_top3=0.9941, train_m2p_top5=0.9969, ups=0.46, bsz=184.4, num_updates=5200, lr=7.53048e-05, gnorm=0.136, clip=0, loss_scale=4096, train_wall=215.74, gb_free=8.3, wall=11383
+2026-07-04 18:15:52 | INFO | train_inner | epoch 015:    344 / 355 loss=0.095, loss_mol_to_pocket=0.095, loss_pocket_to_mol=0.09, train_m2p_mrr=0.9871, train_m2p_top1=0.9791, train_m2p_top3=0.9943, train_m2p_top5=0.9973, ups=0.46, bsz=183.3, num_updates=5300, lr=7.47071e-05, gnorm=0.137, clip=0, loss_scale=4096, train_wall=216.4, gb_free=8.3, wall=11601
+2026-07-04 18:16:15 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 18:16:15 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 18:16:18 | INFO | valid | epoch 015 | valid on 'valid' subset | loss 1.111 | loss_mol_to_pocket 1.111 | loss_pocket_to_mol 1.284 | valid_m2p_mrr 0.8528 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.9316 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 5311 | best_valid_m2p_mrr 0.8558
+2026-07-04 18:16:18 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 15 @ 5311 updates
+2026-07-04 18:16:18 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint15.pt
+2026-07-04 18:16:19 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint15.pt
+2026-07-04 18:16:19 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint15.pt (epoch 15 @ 5311 updates, score 0.8528) (writing took 0.6980982930399477 seconds)
+2026-07-04 18:16:19 | INFO | unicore_cli.train | end of epoch 15 (average epoch stats below)
+2026-07-04 18:16:19 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint15.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint15.pt
+2026-07-04 18:16:19 | INFO | train | epoch 015 | loss 0.092 | loss_mol_to_pocket 0.092 | loss_pocket_to_mol 0.088 | train_m2p_mrr 0.9884 | train_m2p_top1 0.9816 | train_m2p_top3 0.9944 | train_m2p_top5 0.9974 | ups 0.46 | bsz 186.4 | num_updates 5311 | lr 7.46414e-05 | gnorm 0.134 | clip 0 | loss_scale 4096 | train_wall 760.63 | gb_free 8.2 | wall 11628
+2026-07-04 18:16:19 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 16
+2026-07-04 18:16:20 | INFO | unicore.trainer | begin training epoch 16
+2026-07-04 18:16:20 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 18:16:24 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint15.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 18:16:25 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint15.pt ...
+2026-07-04 18:16:25 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint10.pt
+2026-07-04 18:16:25 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 18:19:22 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:19:35 | INFO | train_inner | epoch 016:     90 / 354 loss=0.093, loss_mol_to_pocket=0.093, loss_pocket_to_mol=0.09, train_m2p_mrr=0.9879, train_m2p_top1=0.9807, train_m2p_top3=0.994, train_m2p_top5=0.9973, ups=0.45, bsz=188.8, num_updates=5400, lr=7.41095e-05, gnorm=0.132, clip=0, loss_scale=4096, train_wall=216.11, gb_free=8.4, wall=11823
+2026-07-04 18:23:14 | INFO | train_inner | epoch 016:    190 / 354 loss=0.094, loss_mol_to_pocket=0.094, loss_pocket_to_mol=0.09, train_m2p_mrr=0.9882, train_m2p_top1=0.9816, train_m2p_top3=0.9939, train_m2p_top5=0.997, ups=0.45, bsz=185.8, num_updates=5500, lr=7.35118e-05, gnorm=0.138, clip=0, loss_scale=4096, train_wall=218.5, gb_free=8.2, wall=12043
+2026-07-04 18:26:51 | INFO | train_inner | epoch 016:    290 / 354 loss=0.086, loss_mol_to_pocket=0.086, loss_pocket_to_mol=0.086, train_m2p_mrr=0.9893, train_m2p_top1=0.9829, train_m2p_top3=0.995, train_m2p_top5=0.998, ups=0.46, bsz=185.8, num_updates=5600, lr=7.29142e-05, gnorm=0.132, clip=0, loss_scale=4096, train_wall=214.71, gb_free=8.4, wall=12259
+2026-07-04 18:28:46 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:29:10 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 18:29:10 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 18:29:13 | INFO | valid | epoch 016 | valid on 'valid' subset | loss 1.117 | loss_mol_to_pocket 1.117 | loss_pocket_to_mol 1.291 | valid_m2p_mrr 0.8522 | valid_m2p_top1 0.7681 | valid_m2p_top3 0.9316 | valid_m2p_top5 0.9582 | bsz 263 | num_updates 5663 | best_valid_m2p_mrr 0.8558
+2026-07-04 18:29:13 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 16 @ 5663 updates
+2026-07-04 18:29:13 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint16.pt
+2026-07-04 18:29:14 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint16.pt
+2026-07-04 18:29:14 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint16.pt (epoch 16 @ 5663 updates, score 0.8522) (writing took 0.709607389755547 seconds)
+2026-07-04 18:29:14 | INFO | unicore_cli.train | end of epoch 16 (average epoch stats below)
+2026-07-04 18:29:14 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint16.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint16.pt
+2026-07-04 18:29:14 | INFO | train | epoch 016 | loss 0.09 | loss_mol_to_pocket 0.09 | loss_pocket_to_mol 0.088 | train_m2p_mrr 0.9885 | train_m2p_top1 0.9818 | train_m2p_top3 0.9943 | train_m2p_top5 0.9975 | ups 0.45 | bsz 186.9 | num_updates 5663 | lr 7.25377e-05 | gnorm 0.133 | clip 0 | loss_scale 4096 | train_wall 764.63 | gb_free 8.5 | wall 12403
+2026-07-04 18:29:14 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 17
+2026-07-04 18:29:15 | INFO | unicore.trainer | begin training epoch 17
+2026-07-04 18:29:15 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 18:29:19 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint16.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 18:29:20 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint16.pt ...
+2026-07-04 18:29:20 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint11.pt
+2026-07-04 18:29:20 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 18:30:36 | INFO | train_inner | epoch 017:     37 / 353 loss=0.089, loss_mol_to_pocket=0.089, loss_pocket_to_mol=0.085, train_m2p_mrr=0.9883, train_m2p_top1=0.9811, train_m2p_top3=0.9949, train_m2p_top5=0.9975, ups=0.44, bsz=187.2, num_updates=5700, lr=7.23165e-05, gnorm=0.131, clip=0, loss_scale=4096, train_wall=218.76, gb_free=8.4, wall=12485
+2026-07-04 18:34:12 | INFO | train_inner | epoch 017:    137 / 353 loss=0.098, loss_mol_to_pocket=0.098, loss_pocket_to_mol=0.093, train_m2p_mrr=0.9872, train_m2p_top1=0.9797, train_m2p_top3=0.994, train_m2p_top5=0.9977, ups=0.46, bsz=188.8, num_updates=5800, lr=7.17189e-05, gnorm=0.141, clip=0, loss_scale=4096, train_wall=214.66, gb_free=8.3, wall=12701
+2026-07-04 18:37:50 | INFO | train_inner | epoch 017:    237 / 353 loss=0.092, loss_mol_to_pocket=0.092, loss_pocket_to_mol=0.089, train_m2p_mrr=0.9888, train_m2p_top1=0.9822, train_m2p_top3=0.9945, train_m2p_top5=0.9974, ups=0.46, bsz=186.9, num_updates=5900, lr=7.11212e-05, gnorm=0.134, clip=0, loss_scale=4096, train_wall=215.99, gb_free=8.2, wall=12918
+2026-07-04 18:38:11 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:41:30 | INFO | train_inner | epoch 017:    338 / 353 loss=0.092, loss_mol_to_pocket=0.092, loss_pocket_to_mol=0.087, train_m2p_mrr=0.988, train_m2p_top1=0.9808, train_m2p_top3=0.9946, train_m2p_top5=0.9977, ups=0.45, bsz=187.4, num_updates=6000, lr=7.05235e-05, gnorm=0.131, clip=0, loss_scale=4096, train_wall=218.93, gb_free=8.3, wall=13139
+2026-07-04 18:42:03 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 18:42:03 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 18:42:06 | INFO | valid | epoch 017 | valid on 'valid' subset | loss 1.112 | loss_mol_to_pocket 1.112 | loss_pocket_to_mol 1.288 | valid_m2p_mrr 0.8486 | valid_m2p_top1 0.7605 | valid_m2p_top3 0.9316 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 6015 | best_valid_m2p_mrr 0.8558
+2026-07-04 18:42:06 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 17 @ 6015 updates
+2026-07-04 18:42:06 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint17.pt
+2026-07-04 18:42:07 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint17.pt
+2026-07-04 18:42:07 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint17.pt (epoch 17 @ 6015 updates, score 0.8486) (writing took 0.689606839325279 seconds)
+2026-07-04 18:42:07 | INFO | unicore_cli.train | end of epoch 17 (average epoch stats below)
+2026-07-04 18:42:07 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint17.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint17.pt
+2026-07-04 18:42:07 | INFO | train | epoch 017 | loss 0.094 | loss_mol_to_pocket 0.094 | loss_pocket_to_mol 0.09 | train_m2p_mrr 0.988 | train_m2p_top1 0.9809 | train_m2p_top3 0.9944 | train_m2p_top5 0.9976 | ups 0.46 | bsz 187.4 | num_updates 6015 | lr 7.04339e-05 | gnorm 0.135 | clip 0 | loss_scale 4096 | train_wall 762.37 | gb_free 8.3 | wall 13175
+2026-07-04 18:42:07 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 18
+2026-07-04 18:42:07 | INFO | unicore.trainer | begin training epoch 18
+2026-07-04 18:42:07 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 18:42:12 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint17.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 18:42:12 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint17.pt ...
+2026-07-04 18:42:12 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint12.pt
+2026-07-04 18:42:12 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 18:45:14 | INFO | train_inner | epoch 018:     85 / 354 loss=0.088, loss_mol_to_pocket=0.088, loss_pocket_to_mol=0.09, train_m2p_mrr=0.9893, train_m2p_top1=0.9831, train_m2p_top3=0.9941, train_m2p_top5=0.9975, ups=0.45, bsz=186.5, num_updates=6100, lr=6.99259e-05, gnorm=0.128, clip=0, loss_scale=4096, train_wall=217.53, gb_free=8.2, wall=13363
+2026-07-04 18:47:41 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:48:55 | INFO | train_inner | epoch 018:    186 / 354 loss=0.084, loss_mol_to_pocket=0.084, loss_pocket_to_mol=0.088, train_m2p_mrr=0.9903, train_m2p_top1=0.9843, train_m2p_top3=0.9956, train_m2p_top5=0.9983, ups=0.45, bsz=190.3, num_updates=6200, lr=6.93282e-05, gnorm=0.123, clip=0, loss_scale=4096, train_wall=220.1, gb_free=7.9, wall=13584
+2026-07-04 18:52:33 | INFO | train_inner | epoch 018:    286 / 354 loss=0.091, loss_mol_to_pocket=0.091, loss_pocket_to_mol=0.088, train_m2p_mrr=0.9887, train_m2p_top1=0.9823, train_m2p_top3=0.9944, train_m2p_top5=0.9975, ups=0.46, bsz=184.4, num_updates=6300, lr=6.87306e-05, gnorm=0.133, clip=0, loss_scale=4096, train_wall=215.69, gb_free=8.2, wall=13801
+2026-07-04 18:55:00 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 18:55:00 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 18:55:03 | INFO | valid | epoch 018 | valid on 'valid' subset | loss 1.106 | loss_mol_to_pocket 1.106 | loss_pocket_to_mol 1.275 | valid_m2p_mrr 0.851 | valid_m2p_top1 0.7643 | valid_m2p_top3 0.9316 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 6368 | best_valid_m2p_mrr 0.8558
+2026-07-04 18:55:03 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 18 @ 6368 updates
+2026-07-04 18:55:03 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint18.pt
+2026-07-04 18:55:04 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint18.pt
+2026-07-04 18:55:04 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint18.pt (epoch 18 @ 6368 updates, score 0.851) (writing took 0.671147364191711 seconds)
+2026-07-04 18:55:04 | INFO | unicore_cli.train | end of epoch 18 (average epoch stats below)
+2026-07-04 18:55:04 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint18.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint18.pt
+2026-07-04 18:55:04 | INFO | train | epoch 018 | loss 0.088 | loss_mol_to_pocket 0.088 | loss_pocket_to_mol 0.088 | train_m2p_mrr 0.9893 | train_m2p_top1 0.983 | train_m2p_top3 0.9946 | train_m2p_top5 0.9978 | ups 0.45 | bsz 186.9 | num_updates 6368 | lr 6.83242e-05 | gnorm 0.129 | clip 0 | loss_scale 4096 | train_wall 766.8 | gb_free 8.5 | wall 13952
+2026-07-04 18:55:04 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 19
+2026-07-04 18:55:04 | INFO | unicore.trainer | begin training epoch 19
+2026-07-04 18:55:04 | INFO | unicore_cli.train | Start iterating over samples
+2026-07-04 18:55:08 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint18.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 18:55:09 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint18.pt ...
+2026-07-04 18:55:09 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint13.pt
+2026-07-04 18:55:09 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 18:56:16 | INFO | train_inner | epoch 019:     32 / 356 loss=0.09, loss_mol_to_pocket=0.09, loss_pocket_to_mol=0.088, train_m2p_mrr=0.9889, train_m2p_top1=0.9825, train_m2p_top3=0.994, train_m2p_top5=0.9979, ups=0.45, bsz=187.9, num_updates=6400, lr=6.81329e-05, gnorm=0.128, clip=0, loss_scale=4096, train_wall=216.52, gb_free=8.4, wall=14024
+2026-07-04 18:57:11 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 18:59:57 | INFO | train_inner | epoch 019:    133 / 356 loss=0.093, loss_mol_to_pocket=0.093, loss_pocket_to_mol=0.094, train_m2p_mrr=0.9869, train_m2p_top1=0.9789, train_m2p_top3=0.9942, train_m2p_top5=0.9978, ups=0.45, bsz=187.3, num_updates=6500, lr=6.75353e-05, gnorm=0.132, clip=0, loss_scale=4096, train_wall=220.01, gb_free=8.2, wall=14246
+2026-07-04 19:03:33 | INFO | train_inner | epoch 019:    233 / 356 loss=0.093, loss_mol_to_pocket=0.093, loss_pocket_to_mol=0.09, train_m2p_mrr=0.9885, train_m2p_top1=0.9819, train_m2p_top3=0.9946, train_m2p_top5=0.9974, ups=0.46, bsz=181.5, num_updates=6600, lr=6.69376e-05, gnorm=0.13, clip=0, loss_scale=4096, train_wall=214.55, gb_free=8.3, wall=14462
+2026-07-04 19:06:30 | INFO | unicore.trainer | NOTE: gradient overflow detected, ignoring gradient, setting loss scale to: 4096.0
+2026-07-04 19:07:13 | INFO | train_inner | epoch 019:    334 / 356 loss=0.093, loss_mol_to_pocket=0.093, loss_pocket_to_mol=0.088, train_m2p_mrr=0.9885, train_m2p_top1=0.9817, train_m2p_top3=0.9938, train_m2p_top5=0.9978, ups=0.46, bsz=187.9, num_updates=6700, lr=6.63399e-05, gnorm=0.135, clip=0, loss_scale=4096, train_wall=218.21, gb_free=8.3, wall=14682
+2026-07-04 19:08:01 | INFO | unicore_cli.train | begin validation on "valid" subset
+2026-07-04 19:08:01 | INFO | unicore.tasks.unicore_task | get EpochBatchIterator for epoch 1
+2026-07-04 19:08:03 | INFO | valid | epoch 019 | valid on 'valid' subset | loss 1.109 | loss_mol_to_pocket 1.109 | loss_pocket_to_mol 1.28 | valid_m2p_mrr 0.8509 | valid_m2p_top1 0.7643 | valid_m2p_top3 0.9316 | valid_m2p_top5 0.9544 | bsz 263 | num_updates 6722 | best_valid_m2p_mrr 0.8558
+2026-07-04 19:08:03 | INFO | unicore_cli.train | early stop since valid performance hasn't improved for last 8 runs
+2026-07-04 19:08:03 | INFO | unicore.checkpoint_utils | Preparing to save checkpoint for epoch 19 @ 6722 updates
+2026-07-04 19:08:03 | INFO | unicore.trainer | Saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint19.pt
+2026-07-04 19:08:04 | INFO | unicore.trainer | Finished saving checkpoint to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint19.pt
+2026-07-04 19:08:04 | INFO | unicore.checkpoint_utils | Saved checkpoint /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint19.pt (epoch 19 @ 6722 updates, score 0.8509) (writing took 0.6729115997441113 seconds)
+2026-07-04 19:08:04 | INFO | unicore_cli.train | end of epoch 19 (average epoch stats below)
+2026-07-04 19:08:04 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint19.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint19.pt
+2026-07-04 19:08:04 | INFO | train | epoch 019 | loss 0.093 | loss_mol_to_pocket 0.093 | loss_pocket_to_mol 0.091 | train_m2p_mrr 0.9879 | train_m2p_top1 0.9808 | train_m2p_top3 0.9941 | train_m2p_top5 0.9976 | ups 0.45 | bsz 185.8 | num_updates 6722 | lr 6.62085e-05 | gnorm 0.132 | clip 0 | loss_scale 4096 | train_wall 770.39 | gb_free 8.2 | wall 14733
+2026-07-04 19:08:05 | INFO | unicore.checkpoint_utils | copy /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint19.pt to /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint_last.pt
+2026-07-04 19:08:07 | INFO | unicore.checkpoint_utils | removing temp file /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/tmp/checkpoint19.pt ...
+2026-07-04 19:08:07 | INFO | unicore.checkpoint_utils | removed /home/fernando.amaral/BioSensIA/BioSensIA-DC/runs/biosensia_finetune/projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8/checkpoints/checkpoint14.pt
+2026-07-04 19:08:07 | INFO | unicore.checkpoint_utils | finished async ckp saving.
+2026-07-04 19:08:07 | INFO | unicore_cli.train | done training in 14716.0 seconds

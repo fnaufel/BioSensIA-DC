@@ -12,7 +12,7 @@
 set -euo pipefail
 
 REPO_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
-export RUN_NAME=projection_lr1e-4_tau071_lambda-mp5pm5_bs96_bsv48_uf1_ppl8
+export RUN_NAME=projection_and_temp_lr1e-4_tau071_lambda-mp1pm0_bs96_bsv48_uf1_ppl8
 
 echo "Run name: ${RUN_NAME}"
 echo "Job ID: ${SLURM_JOB_ID}"
@@ -31,7 +31,7 @@ TMP_SAVE_DIR="$RUN_DIR/tmp" \
 TSB_DIR="$RUN_DIR/tensorboard" \
 DATA_DIR="$PWD/data/biosensia_finetune" \
 INIT_CHECKPOINT="$PWD/external/DrugCLIP/checkpoint_best_original.pt" \
-TRAINABLE_PARAMS=projection \
+TRAINABLE_PARAMS=projection-and-logit-scale \
 LR=1e-4 \
 TEMPERATURE=0.07142857142857142 \
 MAX_EPOCH=50 \
@@ -39,8 +39,8 @@ BATCH_SIZE=96 \
 BATCH_SIZE_VALID=48 \
 UPDATE_FREQ=1 \
 POSITIVES_PER_LIGAND=8 \
-LAMBDA_MOL_TO_POCKET=0.5 \
-LAMBDA_POCKET_TO_MOL=0.5 \
+LAMBDA_MOL_TO_POCKET=1 \
+LAMBDA_POCKET_TO_MOL=0 \
 METRIC_TOP_K=1,3,5 \
 BEST_METRIC=valid_m2p_mrr \
 PATIENCE=8 \

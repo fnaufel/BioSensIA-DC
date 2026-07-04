@@ -1,0 +1,88 @@
+/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/launch.py:208: FutureWarning: The module torch.distributed.launch is deprecated
+and will be removed in future. Use torchrun.
+Note that --use-env is set by default in torchrun.
+If your script expects `--local-rank` argument to be set, please
+change it to read from `os.environ['LOCAL_RANK']` instead. See 
+https://pytorch.org/docs/stable/distributed.html#launch-utility for 
+further instructions
+
+  main()
+[W630 17:20:53.409146415 Utils.hpp:136] Warning: Environment variable NCCL_ASYNC_ERROR_HANDLING is deprecated; use TORCH_NCCL_ASYNC_ERROR_HANDLING instead (function operator())
+[W630 17:20:53.575412965 Utils.hpp:136] Warning: Environment variable NCCL_ASYNC_ERROR_HANDLING is deprecated; use TORCH_NCCL_ASYNC_ERROR_HANDLING instead (function operator())
+[rank0]:[W630 17:20:54.780057814 Utils.hpp:111] Warning: Environment variable NCCL_ASYNC_ERROR_HANDLING is deprecated; use TORCH_NCCL_ASYNC_ERROR_HANDLING instead (function operator())
+[rank1]:[W630 17:20:54.780074450 Utils.hpp:111] Warning: Environment variable NCCL_ASYNC_ERROR_HANDLING is deprecated; use TORCH_NCCL_ASYNC_ERROR_HANDLING instead (function operator())
+[rank1]:[W630 17:21:14.720781570 reducer.cpp:1400] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+[rank0]:[W630 17:21:15.923812070 reducer.cpp:1400] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+[rank1]:[E630 17:25:54.509673409 ProcessGroupNCCL.cpp:629] [Rank 1] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1448, OpType=ALLREDUCE, NumelIn=2, NumelOut=2, Timeout(ms)=90000) ran for 90025 milliseconds before timing out.
+[rank1]:[E630 17:25:54.510111455 ProcessGroupNCCL.cpp:2168] [PG ID 0 PG GUID 0(default_pg) Rank 1]  failure detected by watchdog at work sequence id: 1448 PG status: last enqueued work: 1448, last completed work: 1447
+[rank1]:[E630 17:25:54.510120038 ProcessGroupNCCL.cpp:667] Stack trace of the failed collective not found, potentially because FlightRecorder is disabled. You can enable it by setting TORCH_NCCL_TRACE_BUFFER_SIZE to a non-zero value.
+[rank0]:[E630 17:25:54.512940069 ProcessGroupNCCL.cpp:629] [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1447, OpType=ALLREDUCE, NumelIn=10, NumelOut=10, Timeout(ms)=90000) ran for 90029 milliseconds before timing out.
+[rank0]:[E630 17:25:54.513065870 ProcessGroupNCCL.cpp:2168] [PG ID 0 PG GUID 0(default_pg) Rank 0]  failure detected by watchdog at work sequence id: 1447 PG status: last enqueued work: 1447, last completed work: 1446
+[rank0]:[E630 17:25:54.513075114 ProcessGroupNCCL.cpp:667] Stack trace of the failed collective not found, potentially because FlightRecorder is disabled. You can enable it by setting TORCH_NCCL_TRACE_BUFFER_SIZE to a non-zero value.
+[rank0]:[E630 17:25:54.789172194 ProcessGroupNCCL.cpp:681] [Rank 0] Some NCCL operations have failed or timed out. Due to the asynchronous nature of CUDA kernels, subsequent GPU operations might run on corrupted/incomplete data.
+[rank0]:[E630 17:25:54.789194538 ProcessGroupNCCL.cpp:695] [Rank 0] To avoid data inconsistency, we are taking the entire process down.
+[rank0]:[E630 17:25:54.790060673 ProcessGroupNCCL.cpp:1895] [PG ID 0 PG GUID 0(default_pg) Rank 0] Process group watchdog thread terminated with exception: [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1447, OpType=ALLREDUCE, NumelIn=10, NumelOut=10, Timeout(ms)=90000) ran for 90029 milliseconds before timing out.
+Exception raised from checkTimeout at /pytorch/torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:632 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x96 (0x7fd4829421b6 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x2b4 (0x7fd483c8bc74 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x890 (0x7fd483c8d7d0 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x14d (0x7fd483c8e6ed in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0x145c0 (0x7fd4ccd115c0 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch.so)
+frame #5: <unknown function> + 0x81ca (0x7fd4e76c11ca in /lib64/libpthread.so.0)
+frame #6: clone + 0x43 (0x7fd4e699be73 in /lib64/libc.so.6)
+
+terminate called after throwing an instance of 'c10::DistBackendError'
+  what():  [PG ID 0 PG GUID 0(default_pg) Rank 0] Process group watchdog thread terminated with exception: [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1447, OpType=ALLREDUCE, NumelIn=10, NumelOut=10, Timeout(ms)=90000) ran for 90029 milliseconds before timing out.
+Exception raised from checkTimeout at /pytorch/torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:632 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x96 (0x7fd4829421b6 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x2b4 (0x7fd483c8bc74 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x890 (0x7fd483c8d7d0 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x14d (0x7fd483c8e6ed in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0x145c0 (0x7fd4ccd115c0 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch.so)
+frame #5: <unknown function> + 0x81ca (0x7fd4e76c11ca in /lib64/libpthread.so.0)
+frame #6: clone + 0x43 (0x7fd4e699be73 in /lib64/libc.so.6)
+
+Exception raised from ncclCommWatchdog at /pytorch/torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:1901 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x96 (0x7fd4829421b6 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0xe5c6fc (0x7fd4838e96fc in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #2: <unknown function> + 0x145c0 (0x7fd4ccd115c0 in /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/lib/libtorch.so)
+frame #3: <unknown function> + 0x81ca (0x7fd4e76c11ca in /lib64/libpthread.so.0)
+frame #4: clone + 0x43 (0x7fd4e699be73 in /lib64/libc.so.6)
+
+W0630 17:25:55.065000 1659550 .venv/lib/python3.11/site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1659553 closing signal SIGTERM
+E0630 17:25:55.229000 1659550 .venv/lib/python3.11/site-packages/torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: -6) local_rank: 0 (pid: 1659552) of binary: /home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/bin/python
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/launch.py", line 208, in <module>
+    main()
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/typing_extensions.py", line 3004, in wrapper
+    return arg(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/launch.py", line 204, in main
+    launch(args)
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/launch.py", line 189, in launch
+    run(args)
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/run.py", line 909, in run
+    elastic_launch(
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/bin/unicore-train FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-06-30_17:25:55
+  host      : pedro-alvares-cabral.uerj.local
+  rank      : 0 (local_rank: 0)
+  exitcode  : -6 (pid: 1659552)
+  error_file: <N/A>
+  traceback : Signal 6 (SIGABRT) received by PID 1659552
+============================================================

@@ -22,13 +22,14 @@ external/DrugCLIP/savedir
 # R project
 .Rproj.user/
 *.Rproj
-/data/candidate_pockets.lmdb
-/data/mols_index.lmdb
-/data/molecules/
+data/candidate_pockets.lmdb
+data/mols_index.lmdb
+data/molecules/
 
 # Libraries
 external/Uni-Core/*.so
-/scratch/training_data_pairs.parquet
-/runs/
-/data/biosensia_finetune/*.txt
-/data/biosensia_finetune/*.lmdb
+scratch/training_data_pairs.parquet
+runs/
+data/biosensia_finetune/*.txt
+data/biosensia_finetune/*.lmdb
+external/DrugCLIP/tsb_dir/
