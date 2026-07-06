@@ -30,12 +30,19 @@
     DrugCLIP](#how-to-run-the-original-drugclip)
     - [Benchmarks](#benchmarks)
     - [Retrieval (virtual screening)](#retrieval-virtual-screening)
-  - [How to do target fishing](#how-to-do-target-fishing)
+  - [How to do target fishing:
+    queries](#how-to-do-target-fishing-queries)
     - [Build the LMDB file containing the candidate
       pockets](#build-the-lmdb-file-containing-the-candidate-pockets)
     - [Build the LMDB file containing the query
       molecule(s)](#build-the-lmdb-file-containing-the-query-molecules)
     - [Run the search](#run-the-search)
+  - [How to do target fishing:
+    benchmarking](#how-to-do-target-fishing-benchmarking)
+    - [Build a positive-pair table for
+      benchmarking](#build-a-positive-pair-table-for-benchmarking)
+    - [Benchmark BioSensIA-DC with
+      `valid.lmdb`](#benchmark-biosensia-dc-with-validlmdb)
 - [Roadmap](#roadmap)
 
 ## Welcome to the repository for the **BioSensIA-DC prototype**
@@ -477,7 +484,7 @@ pocket in the query).
 Because of hard-coded constraints in the original DrugCLIP code, a GPU
 must be available for the script to run.
 
-### How to do target fishing
+### How to do target fishing: queries
 
 The code in the original DrugCLIP repository does not support target
 fishing (submitting query **molecules** to retrieve **pockets** ranked
@@ -491,8 +498,8 @@ target fishing, there is no candidate-pocket LMDB for the
 molecule-to-pocket direction. BioSensIA builds one from the exact pocket
 records in `external/DrugCLIP/data/train.lmdb` and
 `external/DrugCLIP/data/valid.lmdb`, preserving duplicate raw PDB IDs
-because repeated training records can have distinct pocket geometries. To
-build this file, run
+because repeated training records can have distinct pocket geometries.
+To build this file, run
 
 ``` python
 import biosensia_target_fishing as tf
@@ -505,7 +512,8 @@ cache before benchmarking; the cache filename is based on the LMDB
 basename and checkpoint, not on the LMDB contents.
 
 See the definition of the `build_candidate_pockets_lmdb` function in
-[`biosensia_target_fishing.py`](biosensia_target_fishing.py) for more details.
+[`biosensia_target_fishing.py`](biosensia_target_fishing.py) for more
+details.
 
 #### Build the LMDB file containing the query molecule(s)
 
@@ -571,7 +579,8 @@ Okadaic acid is **not** in the local source LMDB file, so all of these
 calls resort to downloading data from PubChem.
 
 See the definition of the `create_mol_lmdb` function in
-[`biosensia_target_fishing.py`](biosensia_target_fishing.py) for more details.
+[`biosensia_target_fishing.py`](biosensia_target_fishing.py) for more
+details.
 
 #### Run the search
 
@@ -603,18 +612,20 @@ embeddings.
 The ranked list of pockets will be saved in a TSV file named
 `ranked_pockets.txt`, located in the same directory as the saved
 embeddings. Each line of the file will contain the candidate pocket
-identifier and its score (the maximum value of its compatibility with any
-molecule in the query).
+identifier and its score (the maximum value of its compatibility with
+any molecule in the query).
 
 Because of hard-coded constraints in the original DrugCLIP code, a GPU
 must be available for the script to run.
 
+### How to do target fishing: benchmarking
+
 #### Build a positive-pair table for benchmarking
 
-Target-fishing benchmarks use an explicit positive-pair table so the same
-runner can evaluate DrugCLIP validation data, CASF-2016, or other
-external datasets. For DrugCLIP validation data, this table can be derived
-directly from the validation LMDB:
+Target-fishing benchmarks use an explicit positive-pair table so the
+same runner can evaluate DrugCLIP validation data, CASF-2016, or other
+external datasets. For DrugCLIP validation data, this table can be
+derived directly from the validation LMDB:
 
 ``` python
 from biosensia_target_fishing_benchmark import write_positive_pairs_from_lmdb
@@ -625,8 +636,126 @@ write_positive_pairs_from_lmdb(
 )
 ```
 
+#### Benchmark BioSensIA-DC with `valid.lmdb`
+
+The DrugCLIP/BioSensIA validation LMDB can be used as a target-fishing
+benchmark because each record contains one positive ligand-pocket pair.
+The benchmark still uses three explicit artifacts:
+
+- a query molecule LMDB containing the validation ligands;
+- a candidate pocket LMDB containing the pockets to rank;
+- a positive-pair table mapping each query molecule to its known
+  positive pocket(s).
+
+Run the commands below from the BioSensIA-DC repository root. A
+CUDA-capable GPU is expected, because the DrugCLIP target-fishing
+encoder path moves inference batches to CUDA.
+
+1.  Build or refresh the candidate pocket LMDB. This copies the exact
+    pocket geometries from `external/DrugCLIP/data/train.lmdb` and
+    `external/DrugCLIP/data/valid.lmdb`, preserving duplicate candidate
+    pockets.
+
+    ``` python
+    import biosensia_target_fishing as tf
+
+    tf.build_candidate_pockets_lmdb(
+        output_path="data/candidate_pockets.lmdb",
+        source_data_dir="external/DrugCLIP/data",
+        splits=("train", "valid"),
+    )
+    ```
+
+    If you rebuild `data/candidate_pockets.lmdb`, remove any old pocket
+    embedding cache for that LMDB before benchmarking.
+
+2.  Build the positive-pair table from the validation LMDB.
+
+    ``` python
+    from biosensia_target_fishing_benchmark import write_positive_pairs_from_lmdb
+
+    write_positive_pairs_from_lmdb(
+        "data/biosensia_finetune/valid.lmdb",
+        "runs/target_fishing_benchmarks/valid_positives.parquet",
+    )
+    ```
+
+3.  Build a query molecule LMDB from the validation LMDB. The query
+    records only need the molecule-side fields used by DrugCLIP target
+    fishing. Duplicate SMILES are collapsed so each query molecule is
+    ranked once.
+
+    ``` python
+    from lmdb_helpers import read_lmdb_records, write_lmdb_records
+
+    valid_records = read_lmdb_records("data/biosensia_finetune/valid.lmdb")
+    query_records = []
+    seen_smiles = set()
+
+    for record in valid_records:
+        smi = str(record["smi"])
+        if smi in seen_smiles:
+            continue
+        seen_smiles.add(smi)
+        query_records.append(
+            {
+                "atoms": record["atoms"],
+                "coordinates": record["coordinates"],
+                "smi": smi,
+            }
+        )
+
+    write_lmdb_records(
+        query_records,
+        "runs/target_fishing_benchmarks/valid_query_mols.lmdb",
+        overwrite=True,
+        map_size=1 << 40,
+    )
+    ```
+
+4.  Run the benchmark for one fine-tuned checkpoint. Replace `RUN_NAME`
+    with the run directory you want to evaluate under
+    `runs/biosensia_finetune`.
+
+    ``` bash
+    RUN_NAME="projection_lr1e-4_tau071_lambda-mp5pm5_bs96_bsv48_uf1_ppl8"
+
+    python -m biosensia_target_fishing_benchmark \
+      --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+      --mol-path runs/target_fishing_benchmarks/valid_query_mols.lmdb \
+      --pocket-path data/candidate_pockets.lmdb \
+      --checkpoint-path "runs/biosensia_finetune/${RUN_NAME}/checkpoints/checkpoint_best.pt" \
+      --emb-dir "runs/target_fishing_benchmarks/pocket_emb/${RUN_NAME}" \
+      --top-k 1000 \
+      --metric-top-k 1,3,5,10 \
+      --output "runs/target_fishing_benchmarks/${RUN_NAME}.json"
+    ```
+
+5.  To benchmark every fine-tuned run that has a `checkpoint_best.pt`,
+    use a shell loop:
+
+    ``` bash
+    for checkpoint in runs/biosensia_finetune/*/checkpoints/checkpoint_best.pt; do
+      run_name="$(basename "$(dirname "$(dirname "$checkpoint")")")"
+      python -m biosensia_target_fishing_benchmark \
+        --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+        --mol-path runs/target_fishing_benchmarks/valid_query_mols.lmdb \
+        --pocket-path data/candidate_pockets.lmdb \
+        --checkpoint-path "$checkpoint" \
+        --emb-dir "runs/target_fishing_benchmarks/pocket_emb/${run_name}" \
+        --top-k 1000 \
+        --metric-top-k 1,3,5,10 \
+        --output "runs/target_fishing_benchmarks/${run_name}.json"
+    done
+    ```
+
+Each output JSON contains the checkpoint path, input artifact paths,
+retrieval depth, and ranking metrics such as MRR, top-k accuracy, and
+recall@k. Candidate pocket embeddings are cached under the `--emb-dir`
+path, so later runs of the same checkpoint and candidate LMDB are
+faster.
+
 ## Roadmap
 
 - Solve [open issues](../../issues).
-- Run target fishing benchmarks.
 - Implement BioSensIA-DC GUI.
