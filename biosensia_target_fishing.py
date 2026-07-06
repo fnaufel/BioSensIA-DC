@@ -11,7 +11,7 @@ import shutil
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable, Sequence
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -23,15 +23,6 @@ from rdkit import Chem, rdBase
 from rdkit.Chem import AllChem
 from tqdm.auto import tqdm
 
-from biosensia_retrieval import (
-    DEFAULT_COMBINE_SET_DIR,
-    DEFAULT_POCKET_RADIUS_ANGSTROM,
-    _first_existing,
-    _normalize_pocket_record,
-    _record_from_data_pkl,
-    _record_from_pocket_pdb,
-    _record_from_protein_and_ligand,
-)
 from lmdb_helpers import write_lmdb_records
 
 
@@ -57,7 +48,6 @@ PUBCHEM_SDF_URL = (
 )
 PUBCHEM_USER_AGENT = "BioSensIA-DC/0.1 (molecule LMDB preparation)"
 
-_PDB_ID_RE = re.compile(r"^[0-9][0-9A-Za-z]{3}$")
 _MOL_SLUG_RE = re.compile(r"[^0-9A-Za-z_.-]+")
 _MOL_INDEX_LOOKUP_DB = b"lookup"
 _MOL_INDEX_META_DB = b"meta"
@@ -342,63 +332,98 @@ def build_mol_lmdb_index(
 def build_candidate_pockets_lmdb(
     output_path: str | Path = DEFAULT_CANDIDATE_POCKETS_LMDB,
     *,
-    combine_set_dir: str | Path = DEFAULT_COMBINE_SET_DIR,
-    radius: float = DEFAULT_POCKET_RADIUS_ANGSTROM,
-    prefer_data_pkl: bool = True,
-    include_pocket_hetatm: bool = False,
+    source_data_dir: str | Path = DEFAULT_DRUGCLIP_DATA_DIR,
+    splits: Sequence[str] = ("train", "valid"),
     overwrite: bool = True,
     skip_invalid: bool = False,
     map_size: int = 1 << 40,
     commit_interval: int = 1000,
+    show_progress: bool = True,
 ) -> dict[str, Any]:
-    """Build the candidate-pocket LMDB used by target fishing.
+    """Build the target-fishing candidate-pocket LMDB from DrugCLIP splits.
 
-    The output records intentionally match the schema consumed by
-    ``DrugCLIPTask.load_pockets_dataset``:
+    The candidate pockets are copied from the DrugCLIP training/validation
+    LMDB records instead of being re-extracted from ``combine_set`` structure
+    bundles. This preserves the exact pocket atom lists and coordinates seen by
+    DrugCLIP during training and validation, which avoids geometry mismatches
+    caused by rebuilding pockets from PDB files.
 
-    ``{"pocket": str, "pocket_atoms": list[str], "pocket_coordinates": ndarray}``
+    Each valid input row becomes one output candidate. Duplicates are kept on
+    purpose: ``train.lmdb`` contains repeated raw PDB IDs, and some repeated IDs
+    have distinct pocket geometries. The output record keeps the raw ``pocket``
+    value so existing positive-pair tables that use raw PDB IDs continue to
+    match benchmark rankings. Duplicate pocket names in ranked outputs are
+    therefore expected.
+
+    Output records contain the fields consumed by
+    ``DrugCLIPTask.load_pockets_dataset`` plus provenance/debug fields:
+
+    ``pocket``
+        Raw pocket identifier copied from the source LMDB, usually a PDB ID.
+    ``pocket_atoms``
+        Pocket atom names/types copied from the source record.
+    ``pocket_coordinates``
+        Pocket coordinates copied from the source record and normalized to a
+        ``float32`` array with shape ``(n_atoms, 3)``.
+    ``source_split``
+        Source split name, for example ``"train"`` or ``"valid"``.
+    ``source_lmdb_key``
+        Numeric LMDB key of the source row, stored as a string.
+    ``pocket_geometry_hash``
+        SHA-256 hash over the normalized atom list and coordinates. This is not
+        used for ranking, but it makes duplicate and geometry-specific analyses
+        reproducible.
+
+    If this function overwrites an existing candidate file, regenerate or remove
+    the corresponding pocket embedding cache before benchmarking. DrugCLIP's
+    pocket cache is keyed by the LMDB basename and checkpoint tag, not by the
+    LMDB file contents.
 
     Parameters
     ----------
     output_path:
         Destination LMDB file. Defaults to ``data/candidate_pockets.lmdb``.
-    combine_set_dir:
-        DrugCLIP ``combine_set`` directory containing one subdirectory per PDB ID.
-    radius:
-        Distance cutoff, in Angstrom, used when a pocket must be generated from
-        protein and ligand files instead of loaded from ``data.pkl``.
-    prefer_data_pkl:
-        Use bundled ``data.pkl`` files first when available.
-    include_pocket_hetatm:
-        Include HETATM rows if falling back to a local ``*_pocket.pdb`` file.
+    source_data_dir:
+        DrugCLIP data directory containing ``{split}.lmdb`` files. Defaults to
+        ``external/DrugCLIP/data``.
+    splits:
+        Source LMDB split names to concatenate. The default ``("train",
+        "valid")`` creates candidates from both DrugCLIP fine-tuning splits.
     overwrite:
         Replace an existing output LMDB.
     skip_invalid:
-        If true, skip pockets that cannot be read or normalized and report them
-        in the returned summary. If false, raise on the first invalid pocket.
+        If true, skip source records whose pocket fields cannot be read or
+        normalized and report them in the returned summary. If false, raise on
+        the first invalid record.
     map_size:
         LMDB map size.
     commit_interval:
         Number of records to write per LMDB transaction.
+    show_progress:
+        Display progress bars while scanning the source LMDB files.
 
     Returns
     -------
     dict[str, Any]
-        Build summary with output path, candidate directory count, written
-        record count, and skipped entries.
+        Build summary with output path, source split counts, written pocket
+        count, and skipped entries.
     """
 
     if commit_interval <= 0:
         raise ValueError("commit_interval must be greater than 0")
 
-    combine_set_dir = Path(combine_set_dir)
     output_path = Path(output_path)
+    source_data_dir = Path(source_data_dir)
+    splits = tuple(str(split).strip() for split in splits if str(split).strip())
+    if not splits:
+        raise ValueError("splits must contain at least one split name")
 
-    bundle_dirs = list(_iter_candidate_bundle_dirs(combine_set_dir))
-    if not bundle_dirs:
-        raise FileNotFoundError(
-            f"No PDB-like bundle directories found in {combine_set_dir}"
-        )
+    source_lmdbs = {split: source_data_dir / f"{split}.lmdb" for split in splits}
+    for split, source_lmdb in source_lmdbs.items():
+        if not source_lmdb.exists():
+            raise FileNotFoundError(
+                f"Source LMDB for split {split!r} not found: {source_lmdb}"
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and not overwrite:
@@ -409,6 +434,7 @@ def build_candidate_pockets_lmdb(
         tmp_output_path.unlink()
 
     skipped: list[dict[str, str]] = []
+    split_summaries: dict[str, dict[str, Any]] = {}
     written = 0
     completed_write = False
     env = lmdb.open(
@@ -422,48 +448,58 @@ def build_candidate_pockets_lmdb(
     )
     transaction = env.begin(write=True)
     try:
-        for pdb_id, bundle_dir in tqdm(
-            bundle_dirs,
-            desc="Building candidate pockets LMDB",
-            unit="pocket",
-        ):
-            try:
-                record, _source = _build_candidate_pocket_record(
-                    pdb_id,
-                    bundle_dir,
-                    radius=radius,
-                    prefer_data_pkl=prefer_data_pkl,
-                    include_pocket_hetatm=include_pocket_hetatm,
-                )
-                if record is None:
-                    raise FileNotFoundError(
-                        f"No usable pocket data found in {bundle_dir}"
-                    )
-                record = _normalize_pocket_record(record, fallback_name=pdb_id)
-            except Exception as exc:
-                if not skip_invalid:
-                    raise RuntimeError(
-                        f"Failed to build candidate pocket record for {pdb_id} "
-                        f"from {bundle_dir}"
-                    ) from exc
-                skipped.append(
-                    {
-                        "accession": pdb_id,
-                        "source": str(bundle_dir),
-                        "error": str(exc),
-                    }
-                )
-                continue
-
-            transaction.put(
-                str(written).encode("ascii"),
-                pickle.dumps(record, protocol=pickle.HIGHEST_PROTOCOL),
+        for split, source_lmdb in source_lmdbs.items():
+            source_records = _lmdb_entry_count(source_lmdb)
+            split_written = 0
+            split_skipped = 0
+            record_iter = tqdm(
+                _iter_pickled_lmdb_records(source_lmdb),
+                total=source_records,
+                desc=f"Copying {split}.lmdb pockets",
+                unit="record",
+                disable=not show_progress,
             )
-            written += 1
+            for source_key, source_record in record_iter:
+                try:
+                    record = _candidate_pocket_record_from_lmdb_record(
+                        source_record,
+                        split=split,
+                        source_key=source_key,
+                    )
+                except Exception as exc:
+                    if not skip_invalid:
+                        raise RuntimeError(
+                            "Failed to build candidate pocket record from "
+                            f"{source_lmdb}:{source_key}"
+                        ) from exc
+                    skipped.append(
+                        {
+                            "split": split,
+                            "source_lmdb": str(source_lmdb),
+                            "lmdb_key": source_key,
+                            "error": str(exc),
+                        }
+                    )
+                    split_skipped += 1
+                    continue
 
-            if written % commit_interval == 0:
-                transaction.commit()
-                transaction = env.begin(write=True)
+                transaction.put(
+                    str(written).encode("ascii"),
+                    pickle.dumps(record, protocol=pickle.HIGHEST_PROTOCOL),
+                )
+                written += 1
+                split_written += 1
+
+                if written % commit_interval == 0:
+                    transaction.commit()
+                    transaction = env.begin(write=True)
+
+            split_summaries[split] = {
+                "source_lmdb": str(source_lmdb),
+                "source_records": source_records,
+                "pockets": split_written,
+                "skipped": split_skipped,
+            }
 
         transaction.commit()
         transaction = None
@@ -485,12 +521,104 @@ def build_candidate_pockets_lmdb(
 
     return {
         "output_path": str(output_path),
-        "combine_set_dir": str(combine_set_dir),
-        "candidate_dirs": len(bundle_dirs),
+        "source_data_dir": str(source_data_dir),
+        "splits": split_summaries,
         "pockets": written,
         "skipped": len(skipped),
         "skipped_entries": skipped,
     }
+
+
+def _lmdb_entry_count(path: Path) -> int:
+    env = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        return env.stat()["entries"]
+    finally:
+        env.close()
+
+
+def _iter_pickled_lmdb_records(path: Path):
+    env = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with env.begin() as transaction:
+            keys = list(transaction.cursor().iternext(values=False))
+            keys = _sort_lmdb_keys(keys)
+            for key in keys:
+                value = transaction.get(key)
+                if value is not None:
+                    yield key.decode("ascii", errors="replace"), pickle.loads(value)
+    finally:
+        env.close()
+
+
+def _sort_lmdb_keys(keys: list[bytes]) -> list[bytes]:
+    try:
+        return sorted(keys, key=lambda key: int(key.decode("ascii")))
+    except ValueError:
+        return sorted(keys)
+
+
+def _candidate_pocket_record_from_lmdb_record(
+    record: dict[str, Any],
+    *,
+    split: str,
+    source_key: str,
+) -> dict[str, Any]:
+    pocket = str(record.get("pocket") or "").strip()
+    if not pocket:
+        raise ValueError("source record is missing a non-empty pocket field")
+
+    if "pocket_atoms" not in record:
+        raise ValueError("source record is missing pocket_atoms")
+    if "pocket_coordinates" not in record:
+        raise ValueError("source record is missing pocket_coordinates")
+
+    atoms = [str(atom).strip() for atom in record["pocket_atoms"]]
+    coordinates = np.asarray(record["pocket_coordinates"], dtype=np.float32)
+    if coordinates.ndim != 2 or coordinates.shape[1] != 3:
+        raise ValueError(
+            "pocket_coordinates must have shape (n_atoms, 3), "
+            f"got {coordinates.shape}"
+        )
+    if len(atoms) != len(coordinates):
+        raise ValueError(
+            "pocket_atoms and pocket_coordinates must have the same length "
+            f"({len(atoms)} != {len(coordinates)})"
+        )
+    if len(atoms) == 0:
+        raise ValueError("source record has no pocket atoms")
+
+    return {
+        "pocket": pocket,
+        "pocket_atoms": atoms,
+        "pocket_coordinates": coordinates,
+        "source_split": split,
+        "source_lmdb_key": source_key,
+        "pocket_geometry_hash": _pocket_geometry_hash(atoms, coordinates),
+    }
+
+
+def _pocket_geometry_hash(atoms: Sequence[str], coordinates: np.ndarray) -> str:
+    digest = sha256()
+    digest.update("\0".join(atoms).encode("utf-8"))
+    digest.update(np.asarray(coordinates, dtype=np.float32).tobytes())
+    return digest.hexdigest()
 
 
 def build_candidate_pockets_frame(
@@ -941,128 +1069,6 @@ def cli_main(argv: list[str] | None = None) -> Path:
         fp16=args.fp16,
         cpu=args.cpu,
     )
-
-
-def _iter_candidate_bundle_dirs(combine_set_dir: Path) -> list[tuple[str, Path]]:
-    if not combine_set_dir.exists():
-        raise FileNotFoundError(f"combine_set directory not found: {combine_set_dir}")
-    if not combine_set_dir.is_dir():
-        raise NotADirectoryError(f"combine_set path is not a directory: {combine_set_dir}")
-
-    return [
-        (path.name.lower(), path)
-        for path in sorted(combine_set_dir.iterdir())
-        if path.is_dir() and _PDB_ID_RE.fullmatch(path.name)
-    ]
-
-
-def _build_candidate_pocket_record(
-    pdb_id: str,
-    bundle_dir: Path,
-    *,
-    radius: float,
-    prefer_data_pkl: bool,
-    include_pocket_hetatm: bool,
-) -> tuple[dict[str, Any], str]:
-    errors: list[str] = []
-
-    data_pkl = bundle_dir / "data.pkl"
-    if prefer_data_pkl and data_pkl.exists():
-        result = _try_candidate_record(
-            "data.pkl",
-            str(data_pkl),
-            lambda: _record_from_data_pkl(data_pkl, pocket_name=pdb_id),
-            pdb_id,
-            errors,
-        )
-        if result is not None:
-            return result
-
-    protein_path = _first_existing(
-        [
-            bundle_dir / f"{pdb_id}_protein.pdb",
-            bundle_dir / "receptor.pdb",
-            bundle_dir / f"{pdb_id}.pdb",
-        ],
-        fallback_globs=[
-            (bundle_dir, "*_protein.pdb"),
-            (bundle_dir, "receptor*.pdb"),
-        ],
-    )
-    ligand_path = _first_existing(
-        [
-            bundle_dir / f"{pdb_id}_ligand.mol2",
-            bundle_dir / "crystal_ligand.mol2",
-            bundle_dir / f"{pdb_id}_ligand.sdf",
-            bundle_dir / "crystal_ligand.sdf",
-        ],
-        fallback_globs=[
-            (bundle_dir, "*_ligand.mol2"),
-            (bundle_dir, "*ligand*.mol2"),
-            (bundle_dir, "*_ligand.sdf"),
-            (bundle_dir, "*ligand*.sdf"),
-        ],
-    )
-    if protein_path is not None and ligand_path is not None:
-        result = _try_candidate_record(
-            "protein+ligand",
-            f"{protein_path} + {ligand_path}",
-            lambda: _record_from_protein_and_ligand(
-                protein_path,
-                ligand_path,
-                pocket_name=pdb_id,
-                radius=radius,
-            ),
-            pdb_id,
-            errors,
-        )
-        if result is not None:
-            return result
-
-    pocket_pdb = _first_existing(
-        [
-            bundle_dir / f"{pdb_id}_pocket.pdb",
-            bundle_dir / f"{pdb_id}_pocket6A.pdb",
-            bundle_dir / "pocket.pdb",
-        ],
-        fallback_globs=[
-            (bundle_dir, "*_pocket.pdb"),
-            (bundle_dir, "*pocket*.pdb"),
-        ],
-    )
-    if pocket_pdb is not None:
-        result = _try_candidate_record(
-            "pocket PDB",
-            str(pocket_pdb),
-            lambda: _record_from_pocket_pdb(
-                pocket_pdb,
-                pocket_name=pdb_id,
-                include_hetatm=include_pocket_hetatm,
-            ),
-            pdb_id,
-            errors,
-        )
-        if result is not None:
-            return result
-
-    if errors:
-        raise ValueError("; ".join(errors))
-    raise FileNotFoundError(f"No usable pocket data found in {bundle_dir}")
-
-
-def _try_candidate_record(
-    source_kind: str,
-    source: str,
-    build_record: Callable[[], dict[str, Any]],
-    pdb_id: str,
-    errors: list[str],
-) -> tuple[dict[str, Any], str] | None:
-    try:
-        record = build_record()
-        return _normalize_pocket_record(record, fallback_name=pdb_id), source
-    except Exception as exc:
-        errors.append(f"{source_kind} ({source}): {exc}")
-        return None
 
 
 def _normalize_molecule_query(molecule: str) -> dict[str, Any]:

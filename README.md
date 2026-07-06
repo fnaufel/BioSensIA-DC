@@ -487,15 +487,22 @@ this functionality.
 #### Build the LMDB file containing the candidate pockets
 
 Because the code in the original DrugCLIP repository did not handle
-target fishing, there is no LMDB file containing all the known pockets.
-To build such a file, run
+target fishing, there is no candidate-pocket LMDB for the
+molecule-to-pocket direction. BioSensIA builds one from the exact pocket
+records in `external/DrugCLIP/data/train.lmdb` and
+`external/DrugCLIP/data/valid.lmdb`, preserving duplicate raw PDB IDs
+because repeated training records can have distinct pocket geometries. To
+build this file, run
 
 ``` python
 import biosensia_target_fishing as tf
 tf.build_candidate_pockets_lmdb()
 ```
 
-The default is to save the file as `data/candidate_pockets.lmdb`.
+The default is to save the file as `data/candidate_pockets.lmdb`. If you
+rebuild or replace this file, remove the corresponding pocket embedding
+cache before benchmarking; the cache filename is based on the LMDB
+basename and checkpoint, not on the LMDB contents.
 
 See the definition of the `build_candidate_pockets_lmdb` function in
 [`biosensia_target_fishing.py`](biosensia_target_fishing.py) for more details.

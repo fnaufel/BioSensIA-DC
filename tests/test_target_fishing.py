@@ -1,5 +1,3 @@
-import pickle
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -15,60 +13,128 @@ from biosensia_target_fishing import (
 from lmdb_helpers import read_lmdb_records, write_lmdb_records
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-COMBINE_SET_DIR = REPO_ROOT / "external/DrugCLIP/data/pdb/combine_set"
-TWO_IE_FOUR_DIR = COMBINE_SET_DIR / "2ie4"
-TWO_R_ONE_W_DIR = COMBINE_SET_DIR / "2r1w"
-
-
 def write_test_lmdb(path: Path, records: list[dict]) -> None:
     write_lmdb_records(records, path, overwrite=True, map_size=1 << 20)
 
 
-def test_build_candidate_pockets_lmdb_writes_encoder_schema(tmp_path):
-    combine_set_dir = tmp_path / "combine_set"
-    bundle_dir = combine_set_dir / "2ie4"
-    bundle_dir.mkdir(parents=True)
-    shutil.copy(TWO_IE_FOUR_DIR / "data.pkl", bundle_dir / "data.pkl")
-    (combine_set_dir / "readme").mkdir()
-    (combine_set_dir / "index").mkdir()
+def test_build_candidate_pockets_lmdb_writes_source_split_pockets_and_duplicates(
+    tmp_path,
+):
+    source_data_dir = tmp_path / "drugclip_data"
+    write_test_lmdb(
+        source_data_dir / "train.lmdb",
+        [
+            {
+                "pocket": "1abc",
+                "pocket_atoms": ["C", "N"],
+                "pocket_coordinates": np.array(
+                    [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                    dtype=np.float64,
+                ),
+                "smi": "C",
+            },
+            {
+                "pocket": "1abc",
+                "pocket_atoms": ["C", "N"],
+                "pocket_coordinates": np.array(
+                    [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+                    dtype=np.float64,
+                ),
+                "smi": "N",
+            },
+        ],
+    )
+    write_test_lmdb(
+        source_data_dir / "valid.lmdb",
+        [
+            {
+                "pocket": "2def",
+                "pocket_atoms": ["O", "S"],
+                "pocket_coordinates": [
+                    np.array([1.0, 1.0, 1.0], dtype=np.float64),
+                    np.array([2.0, 2.0, 2.0], dtype=np.float64),
+                ],
+                "smi": "O",
+            }
+        ],
+    )
 
     output_path = tmp_path / "candidate_pockets.lmdb"
     summary = build_candidate_pockets_lmdb(
         output_path,
-        combine_set_dir=combine_set_dir,
+        source_data_dir=source_data_dir,
+        show_progress=False,
     )
 
     assert summary == {
         "output_path": str(output_path),
-        "combine_set_dir": str(combine_set_dir),
-        "candidate_dirs": 1,
-        "pockets": 1,
+        "source_data_dir": str(source_data_dir),
+        "splits": {
+            "train": {
+                "source_lmdb": str(source_data_dir / "train.lmdb"),
+                "source_records": 2,
+                "pockets": 2,
+                "skipped": 0,
+            },
+            "valid": {
+                "source_lmdb": str(source_data_dir / "valid.lmdb"),
+                "source_records": 1,
+                "pockets": 1,
+                "skipped": 0,
+            },
+        },
+        "pockets": 3,
         "skipped": 0,
         "skipped_entries": [],
     }
 
     records = read_lmdb_records(output_path)
-    assert len(records) == 1
-    assert set(records[0]) == {"pocket", "pocket_atoms", "pocket_coordinates"}
-    assert records[0]["pocket"] == "2ie4"
-    assert len(records[0]["pocket_atoms"]) == 546
-    assert np.asarray(records[0]["pocket_coordinates"]).shape == (546, 3)
+    assert len(records) == 3
+    assert [record["pocket"] for record in records] == ["1abc", "1abc", "2def"]
+    assert [record["source_split"] for record in records] == [
+        "train",
+        "train",
+        "valid",
+    ]
+    assert [record["source_lmdb_key"] for record in records] == ["0", "1", "0"]
     assert np.asarray(records[0]["pocket_coordinates"]).dtype == np.float32
+    assert np.asarray(records[2]["pocket_coordinates"]).shape == (2, 3)
+    assert records[0]["pocket_geometry_hash"] != records[1]["pocket_geometry_hash"]
+    assert len(records[0]["pocket_geometry_hash"]) == 64
 
 
 def test_build_candidate_pockets_frame_reads_pocket_atom_counts(tmp_path):
-    combine_set_dir = tmp_path / "combine_set"
-    bundle_dir = combine_set_dir / "2ie4"
-    bundle_dir.mkdir(parents=True)
-    shutil.copy(TWO_IE_FOUR_DIR / "data.pkl", bundle_dir / "data.pkl")
+    source_data_dir = tmp_path / "drugclip_data"
+    write_test_lmdb(
+        source_data_dir / "train.lmdb",
+        [
+            {
+                "pocket": "1abc",
+                "pocket_atoms": ["C", "N"],
+                "pocket_coordinates": np.zeros((2, 3), dtype=np.float32),
+            },
+            {
+                "pocket": "1abc",
+                "pocket_atoms": ["C", "N", "O"],
+                "pocket_coordinates": np.ones((3, 3), dtype=np.float32),
+            },
+        ],
+    )
     output_path = tmp_path / "candidate_pockets.lmdb"
-    build_candidate_pockets_lmdb(output_path, combine_set_dir=combine_set_dir)
+    build_candidate_pockets_lmdb(
+        output_path,
+        source_data_dir=source_data_dir,
+        splits=("train",),
+        show_progress=False,
+    )
 
     df = build_candidate_pockets_frame(output_path)
 
     assert df.columns == ["pocket", "pocket_atoms"]
-    assert df.to_dicts() == [{"pocket": "2ie4", "pocket_atoms": 546}]
+    assert df.to_dicts() == [
+        {"pocket": "1abc", "pocket_atoms": 2},
+        {"pocket": "1abc", "pocket_atoms": 3},
+    ]
 
 
 def test_build_ranked_pockets_frame_reads_scores_and_adds_pdb_links(tmp_path):
@@ -96,70 +162,69 @@ def test_build_ranked_pockets_frame_reads_scores_and_adds_pdb_links(tmp_path):
     ]
 
 
-def test_build_candidate_pockets_lmdb_raises_for_invalid_bundle_by_default(tmp_path):
-    combine_set_dir = tmp_path / "combine_set"
-    (combine_set_dir / "9zzz").mkdir(parents=True)
-
-    with pytest.raises(RuntimeError, match="9zzz"):
-        build_candidate_pockets_lmdb(
-            tmp_path / "candidate_pockets.lmdb",
-            combine_set_dir=combine_set_dir,
-        )
-
-
-def test_build_candidate_pockets_lmdb_falls_back_from_empty_data_pkl_to_pocket_pdb(
+def test_build_candidate_pockets_lmdb_raises_for_invalid_source_record_by_default(
     tmp_path,
 ):
-    combine_set_dir = tmp_path / "combine_set"
-    bundle_dir = combine_set_dir / "2r1w"
-    bundle_dir.mkdir(parents=True)
-    with (bundle_dir / "data.pkl").open("wb") as handle:
-        pickle.dump(
+    source_data_dir = tmp_path / "drugclip_data"
+    write_test_lmdb(
+        source_data_dir / "train.lmdb",
+        [
             {
-                "pocket": "2r1w",
-                "pocket_atoms": [],
-                "pocket_coordinates": [],
-            },
-            handle,
+                "pocket": "1abc",
+                "pocket_atoms": ["C"],
+            }
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="train.lmdb:0"):
+        build_candidate_pockets_lmdb(
+            tmp_path / "candidate_pockets.lmdb",
+            source_data_dir=source_data_dir,
+            splits=("train",),
+            show_progress=False,
         )
-    shutil.copy(TWO_R_ONE_W_DIR / "2r1w_pocket.pdb", bundle_dir / "2r1w_pocket.pdb")
 
-    output_path = tmp_path / "candidate_pockets.lmdb"
-    summary = build_candidate_pockets_lmdb(
-        output_path,
-        combine_set_dir=combine_set_dir,
+
+def test_build_candidate_pockets_lmdb_can_skip_invalid_source_records(tmp_path):
+    source_data_dir = tmp_path / "drugclip_data"
+    write_test_lmdb(
+        source_data_dir / "train.lmdb",
+        [
+            {
+                "pocket": "1abc",
+                "pocket_atoms": ["C"],
+                "pocket_coordinates": np.zeros((1, 3), dtype=np.float32),
+            },
+            {
+                "pocket": "9zzz",
+                "pocket_atoms": ["C", "N"],
+                "pocket_coordinates": np.zeros((1, 3), dtype=np.float32),
+            },
+        ],
     )
 
-    assert summary["candidate_dirs"] == 1
-    assert summary["pockets"] == 1
-    assert summary["skipped"] == 0
-
-    record = read_lmdb_records(output_path)[0]
-    assert set(record) == {"pocket", "pocket_atoms", "pocket_coordinates"}
-    assert record["pocket"] == "2r1w"
-    assert len(record["pocket_atoms"]) == 216
-    assert np.asarray(record["pocket_coordinates"]).shape == (216, 3)
-
-
-def test_build_candidate_pockets_lmdb_can_skip_invalid_bundles(tmp_path):
-    combine_set_dir = tmp_path / "combine_set"
-    bundle_dir = combine_set_dir / "2ie4"
-    bundle_dir.mkdir(parents=True)
-    shutil.copy(TWO_IE_FOUR_DIR / "data.pkl", bundle_dir / "data.pkl")
-    (combine_set_dir / "9zzz").mkdir()
-
     output_path = tmp_path / "candidate_pockets.lmdb"
     summary = build_candidate_pockets_lmdb(
         output_path,
-        combine_set_dir=combine_set_dir,
+        source_data_dir=source_data_dir,
+        splits=("train",),
         skip_invalid=True,
+        show_progress=False,
     )
 
-    assert summary["candidate_dirs"] == 2
     assert summary["pockets"] == 1
     assert summary["skipped"] == 1
-    assert summary["skipped_entries"][0]["accession"] == "9zzz"
-    assert len(read_lmdb_records(output_path)) == 1
+    assert summary["splits"]["train"] == {
+        "source_lmdb": str(source_data_dir / "train.lmdb"),
+        "source_records": 2,
+        "pockets": 1,
+        "skipped": 1,
+    }
+    assert summary["skipped_entries"][0]["split"] == "train"
+    assert summary["skipped_entries"][0]["lmdb_key"] == "1"
+    records = read_lmdb_records(output_path)
+    assert len(records) == 1
+    assert records[0]["pocket"] == "1abc"
 
 
 def test_create_mol_lmdb_copies_matching_records_from_source_lmdb(tmp_path):
