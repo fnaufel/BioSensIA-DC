@@ -494,9 +494,23 @@ The shell script [`external/DrugCLIP/target_fishing.sh`](external/DrugCLIP/targe
 
 The first time the target fishing script is run, DrugCLIP must generate embeddings for **all** of the candidate pockets. This may take a long time. The generated embeddings are saved to a file in the directory specified by the `EMB_DIR` variable, whose default is `external/DrugCLIP/data/pocket_emb`. Subsequent runs with the same set of candidate pockets will be much faster, as they will use these saved embeddings.
 
-The ranked list of pockets will be saved in a TSV file named `ranked_pockets.txt`, located in the same directory as the saved embeddings. Each line of the file will contain the PDB accession of the pocket (which is also the name of the subdirectory of `external/DrugCLIP/data/pdb/combine_set/` corresponding to the pocket) and its score (the maximum value of its compatibility with any molecule in the query).
+The ranked list of pockets will be saved in a TSV file named `ranked_pockets.txt`, located in the same directory as the saved embeddings. Each line of the file will contain the candidate pocket identifier and its score (the maximum value of its compatibility with any molecule in the query).
 
 Because of hard-coded constraints in the original DrugCLIP code, a GPU must be available for the script to run.
+
+
+#### Build a positive-pair table for benchmarking
+
+Target-fishing benchmarks use an explicit positive-pair table so the same runner can evaluate DrugCLIP validation data, CASF-2016, or other external datasets. For DrugCLIP validation data, this table can be derived directly from the validation LMDB:
+
+```{python}
+from biosensia_target_fishing_benchmark import write_positive_pairs_from_lmdb
+
+write_positive_pairs_from_lmdb(
+    "data/biosensia_finetune/valid.lmdb",
+    "runs/target_fishing_benchmarks/valid_positives.parquet",
+)
+```
 
 
 ## Roadmap

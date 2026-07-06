@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+import lmdb
 import polars as pl
 
 from biosensia_finetuning import target_fishing_rank_metrics
@@ -131,6 +133,83 @@ def read_positive_pairs(
     return dict(positives)
 
 
+def build_positive_pairs_frame_from_lmdb(
+    lmdb_path: str | Path,
+    *,
+    query_field: str = "smi",
+    pocket_field: str = "pocket",
+    query_column: str = "query",
+    pocket_column: str = "pocket",
+    unique: bool = True,
+) -> pl.DataFrame:
+    """Build a positive-pair table from a DrugCLIP-style LMDB split.
+
+    DrugCLIP train/valid LMDB records already encode positive pairs: the ligand
+    fields in a record bind to the pocket fields in that same record. This
+    helper converts those records into the explicit two-column ground-truth
+    table consumed by :func:`run_target_fishing_benchmark`.
+
+    By default, the output columns are ``query`` and ``pocket``, populated from
+    the source record's ``smi`` and ``pocket`` fields. Use ``query_field`` and
+    ``pocket_field`` when the benchmark should use a different identity, such
+    as ``ligand_key`` or ``pocket_geometry_hash``.
+    """
+
+    rows = []
+    for lmdb_key, record in _iter_pickled_lmdb_records(Path(lmdb_path)):
+        missing = [
+            field
+            for field in (query_field, pocket_field)
+            if field not in record or record[field] is None or record[field] == ""
+        ]
+        if missing:
+            raise ValueError(
+                f"LMDB record {lmdb_key} in {lmdb_path} is missing "
+                f"required field(s): {missing}"
+            )
+        rows.append(
+            {
+                query_column: str(record[query_field]),
+                pocket_column: str(record[pocket_field]),
+            }
+        )
+
+    df = pl.DataFrame(
+        rows,
+        schema={
+            query_column: pl.String,
+            pocket_column: pl.String,
+        },
+        orient="row",
+    )
+    return df.unique(maintain_order=True) if unique else df
+
+
+def write_positive_pairs_from_lmdb(
+    lmdb_path: str | Path,
+    output_path: str | Path,
+    *,
+    query_field: str = "smi",
+    pocket_field: str = "pocket",
+    query_column: str = "query",
+    pocket_column: str = "pocket",
+    unique: bool = True,
+) -> pl.DataFrame:
+    """Write an explicit positive-pair table derived from an LMDB split."""
+
+    output_path = Path(output_path)
+    df = build_positive_pairs_frame_from_lmdb(
+        lmdb_path,
+        query_field=query_field,
+        pocket_field=pocket_field,
+        query_column=query_column,
+        pocket_column=pocket_column,
+        unique=unique,
+    )
+    _write_frame(df, output_path)
+    return df
+
+
 def _read_frame(path: Path) -> pl.DataFrame:
     suffix = path.suffix.lower()
     if suffix == ".parquet":
@@ -140,6 +219,50 @@ def _read_frame(path: Path) -> pl.DataFrame:
     if suffix in {".jsonl", ".ndjson"}:
         return pl.read_ndjson(path)
     raise ValueError("positives file must be .parquet, .csv, .jsonl, or .ndjson")
+
+
+def _write_frame(df: pl.DataFrame, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = path.suffix.lower()
+    if suffix == ".parquet":
+        df.write_parquet(path)
+        return
+    if suffix == ".csv":
+        df.write_csv(path)
+        return
+    if suffix in {".jsonl", ".ndjson"}:
+        df.write_ndjson(path)
+        return
+    raise ValueError("positives file must be .parquet, .csv, .jsonl, or .ndjson")
+
+
+def _iter_pickled_lmdb_records(path: Path):
+    env = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with env.begin() as transaction:
+            keys = list(transaction.cursor().iternext(values=False))
+            keys = _sort_lmdb_keys(keys)
+            for key in keys:
+                value = transaction.get(key)
+                if value is not None:
+                    yield key.decode("ascii", errors="replace"), pickle.loads(value)
+    finally:
+        env.close()
+
+
+def _sort_lmdb_keys(keys: list[bytes]) -> list[bytes]:
+    try:
+        return sorted(keys, key=lambda key: int(key.decode("ascii")))
+    except ValueError:
+        return sorted(keys)
 
 
 def _parse_top_k(value: str) -> tuple[int, ...]:
