@@ -1420,7 +1420,8 @@ class DrugCLIP(UnicoreTask):
             "coordinates",
         )
 
-        scores = mol_reps @ pocket_reps.T
+        # scores = mol_reps @ pocket_reps.T
+        scores = pocket_reps @ mol_reps.T
         rankings = {}
         ranking_scores = {}
         for mol_index, mol_name in enumerate(mol_names):
