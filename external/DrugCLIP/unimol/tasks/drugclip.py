@@ -1210,6 +1210,7 @@ class DrugCLIP(UnicoreTask):
         )
 
         if os.path.exists(cache_path):
+            logger.info("loading cached candidate-pocket embeddings from %s", cache_path)
             with open(cache_path, "rb") as f:
                 pocket_reps, pocket_names = pickle.load(f)
             return pocket_reps, pocket_names

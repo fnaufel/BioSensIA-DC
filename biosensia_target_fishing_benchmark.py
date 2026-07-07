@@ -63,9 +63,11 @@ def run_target_fishing_benchmark(
     The model checkpoint, DrugCLIP data directory, query molecule LMDB, pocket
     LMDB, embedding cache directory, batch sizes, worker count, seed, precision,
     and device mode are passed through to the BioSensIA target-fishing helpers
-    built around the DrugCLIP task/model APIs. Candidate pocket embeddings may
-    be cached in ``emb_dir``; query molecule embeddings are recomputed for the
-    supplied ``mol_path``.
+    built around the DrugCLIP task/model APIs. If ``emb_dir`` already contains
+    a candidate-pocket embedding cache for the same pocket LMDB basename and
+    checkpoint tag, DrugCLIP loads that cache instead of embedding the pockets
+    again. Query molecule embeddings are recomputed for the supplied
+    ``mol_path``.
 
     ``top_k`` controls how many ranked pockets are retrieved per query.
     ``metric_top_k`` controls which top-k cutoffs are reported by
