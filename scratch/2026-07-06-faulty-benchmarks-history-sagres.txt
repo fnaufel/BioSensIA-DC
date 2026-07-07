@@ -1,0 +1,415 @@
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:02:28]
+❯ uv run python - <<'PY'
+import polars as pl
+
+df = pl.read_parquet("data/biosensia_finetune/training_data_pairs.parquet")
+valid = df.filter(pl.col("split") == "valid")
+
+valid.select(
+    pl.col("raw_smi").alias("query"),
+    pl.col("raw_pocket").alias("pocket"),
+).unique().write_parquet(
+    "runs/target_fishing_benchmarks/valid_positives.parquet"
+)
+PY
+Installed 1 package in 4.17s
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:02:48][⏱8s]
+❯ 
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:04:57]
+❯ srun --partition=gpu --gres=gpu:1 --pty=bash
+srun: fatal: No command given to execute.
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:05:26]
+✗ srun --partition=gpu --gres=gpu:1 bash
+
+
+
+
+
+  C-c C-csrun: interrupt (one more within 1 sec to abort)
+srun: StepId=19544.0 task 0: running
+  C-c C-csrun: interrupt (one more within 1 sec to abort)
+srun: StepId=19544.0 task 0: running
+  C-c C-csrun: sending Ctrl-C to StepId=19544.0
+srun: forcing job termination
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:06:10][⏱14s]
+✗ squeue
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+             19543       cpu IG_group nikolas.  R       4:10      1 bartolomeu-dias
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:06:14]
+❯ srun --partition=gpu --gres=gpu:1 --time=00:05:00 --pty bash
+Enter passphrase for /home/fernando.amaral/.ssh/id_ed25519_github: 
+Identity added: /home/fernando.amaral/.ssh/id_ed25519_github (github-sagres-fernando.amaral@mgt1)
+Lifetime set to 28800 seconds
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:08:39][⏱4s]
+❯ python biosensia_target_fishing_benchmark.py \
+  --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+  --query-column query \
+  --pocket-column pocket \
+  --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+  --mol-path data/biosensia_finetune/valid.lmdb \
+  --pocket-path data/candidate_pockets.lmdb \
+  --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+  --top-k 1000 \
+  --metric-top-k 1,3,5,10 \
+  --output runs/target_fishing_benchmarks/original_drugclip.json
+python biosensia_target_fishing_benchmark.py \
+∙   --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+∙   --query-column query \
+∙   --pocket-column pocket \
+∙   --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+∙   --mol-path data/biosensia_finetune/valid.lmdb \
+∙   --pocket-path data/candidate_pockets.lmdb \
+∙   --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+∙   --top-k 1000 \
+∙   --metric-top-k 1,3,5,10 \
+∙   --output runs/target_fishing_benchmarks/original_drugclip.json
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+23567 0.1
+23567 0.1
+Embedding candidate pockets:   0%|▏                                                                                                                | 28/19443 [00:01<12:12, 26.52pocket/s]
+Traceback (most recent call last):
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 206, in <module>
+    main()
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 179, in main
+    result = run_target_fishing_benchmark(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 101, in run_target_fishing_benchmark
+    rankings, _scores = retrieve_pocket_rankings_from_drugclip(args)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing.py", line 718, in retrieve_pocket_rankings_from_drugclip
+    return task.rank_pockets_by_query(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 1410, in rank_pockets_by_query
+    pocket_reps, pocket_names = self.encode_pockets_once(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 1272, in encode_pockets_once
+    pocket_emb = pocket_emb.detach().cpu().numpy()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:09:21][⏱12s]
+✗ vact
+vact
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:09:27]
+❯ python biosensia_target_fishing_benchmark.py \
+  --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+  --query-column query \
+  --pocket-column pocket \
+  --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+  --mol-path data/biosensia_finetune/valid.lmdb \
+  --pocket-path data/candidate_pockets.lmdb \
+  --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+  --top-k 1000 \
+  --metric-top-k 1,3,5,10 \
+  --output runs/target_fishing_benchmarks/original_drugclip.json
+python biosensia_target_fishing_benchmark.py \
+∙   --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+∙   --query-column query \
+∙   --pocket-column pocket \
+∙   --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+∙   --mol-path data/biosensia_finetune/valid.lmdb \
+∙   --pocket-path data/candidate_pockets.lmdb \
+∙   --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+∙   --top-k 1000 \
+∙   --metric-top-k 1,3,5,10 \
+∙   --output runs/target_fishing_benchmarks/original_drugclip.json
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+23567 0.1
+23567 0.1
+Embedding candidate pockets:   2%|██▏                                                                                                             | 372/19443 [00:08<07:04, 44.98pocket/s]
+Traceback (most recent call last):
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 206, in <module>
+    main()
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 179, in main
+    result = run_target_fishing_benchmark(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 101, in run_target_fishing_benchmark
+    rankings, _scores = retrieve_pocket_rankings_from_drugclip(args)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing.py", line 718, in retrieve_pocket_rankings_from_drugclip
+    return task.rank_pockets_by_query(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 1410, in rank_pockets_by_query
+    pocket_reps, pocket_names = self.encode_pockets_once(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 1272, in encode_pockets_once
+    pocket_emb = pocket_emb.detach().cpu().numpy()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:09:44][⏱12s]
+✗ exit
+srun: error: pedro-alvares-cabral: task 0: Exited with exit code 130
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:09:50][⏱1m15s]
+✗ srun --partition=gpu --gres=gpu:1 --time=05:00:00 --pty bash
+Enter passphrase for /home/fernando.amaral/.ssh/id_ed25519_github: 
+Identity added: /home/fernando.amaral/.ssh/id_ed25519_github (github-sagres-fernando.amaral@mgt1)
+Lifetime set to 28800 seconds
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:10:12][⏱3s]
+❯ vact
+vact
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:10:17]
+❯ python biosensia_target_fishing_benchmark.py \
+  --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+  --query-column query \
+  --pocket-column pocket \
+  --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+  --mol-path data/biosensia_finetune/valid.lmdb \
+  --pocket-path data/candidate_pockets.lmdb \
+  --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+  --top-k 1000 \
+  --metric-top-k 1,3,5,10 \
+  --output runs/target_fishing_benchmarks/original_drugclip.json
+python biosensia_target_fishing_benchmark.py \
+∙   --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+∙   --query-column query \
+∙   --pocket-column pocket \
+∙   --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+∙   --mol-path data/biosensia_finetune/valid.lmdb \
+∙   --pocket-path data/candidate_pockets.lmdb \
+∙   --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+∙   --top-k 1000 \
+∙   --metric-top-k 1,3,5,10 \
+∙   --output runs/target_fishing_benchmarks/original_drugclip.json
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+23567 0.1
+23567 0.1
+Embedding candidate pockets: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████| 19443/19443 [06:28<00:00, 50.04pocket/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 132/132 [00:01<00:00, 120.52it/s]
+{
+  "checkpoint_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best.pt",
+  "metrics": {
+    "mrr": 0.07310336060272117,
+    "queries": 263.0,
+    "recall_at_1": 0.026615969581749048,
+    "recall_at_10": 0.1634980988593156,
+    "recall_at_3": 0.060836501901140684,
+    "recall_at_5": 0.08745247148288973,
+    "top10_accuracy": 0.1634980988593156,
+    "top1_accuracy": 0.026615969581749048,
+    "top3_accuracy": 0.060836501901140684,
+    "top5_accuracy": 0.08745247148288973
+  },
+  "mol_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune/valid.lmdb",
+  "pocket_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/candidate_pockets.lmdb",
+  "positives_path": "runs/target_fishing_benchmarks/valid_positives.parquet",
+  "top_k": 1000
+}
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [15:16:58][⏱6m37s]
+❯ python biosensia_target_fishing_benchmark.py \
+  --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+  --query-column query \
+  --pocket-column pocket \
+  --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+  --mol-path data/biosensia_finetune/valid.lmdb \
+  --pocket-path data/candidate_pockets.lmdb \
+  --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+  --top-k 1000 \
+  --metric-top-k 1,3,5,10,50,100,500,1000 \
+  --output runs/target_fishing_benchmarks/original_drugclip.json
+python biosensia_target_fishing_benchmark.py \
+∙   --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+∙   --query-column query \
+∙   --pocket-column pocket \
+∙   --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+∙   --mol-path data/biosensia_finetune/valid.lmdb \
+∙   --pocket-path data/candidate_pockets.lmdb \
+∙   --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip \
+∙   --top-k 1000 \
+∙   --metric-top-k 1,3,5,10,50,100,500,1000 \
+∙   --output runs/target_fishing_benchmarks/original_drugclip.json
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+23567 0.1
+23567 0.1
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 132/132 [00:01<00:00, 87.04it/s]
+{
+  "checkpoint_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best.pt",
+  "metrics": {
+    "mrr": 0.06813639630946376,
+    "queries": 263.0,
+    "recall_at_1": 0.019011406844106463,
+    "recall_at_10": 0.1596958174904943,
+    "recall_at_100": 0.5931558935361216,
+    "recall_at_1000": 0.8479087452471483,
+    "recall_at_3": 0.06463878326996197,
+    "recall_at_5": 0.09885931558935361,
+    "recall_at_50": 0.4372623574144487,
+    "recall_at_500": 0.7984790874524715,
+    "top1000_accuracy": 0.8479087452471483,
+    "top100_accuracy": 0.5931558935361216,
+    "top10_accuracy": 0.1596958174904943,
+    "top1_accuracy": 0.019011406844106463,
+    "top3_accuracy": 0.06463878326996197,
+    "top500_accuracy": 0.7984790874524715,
+    "top50_accuracy": 0.4372623574144487,
+    "top5_accuracy": 0.09885931558935361
+  },
+  "mol_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune/valid.lmdb",
+  "pocket_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/candidate_pockets.lmdb",
+  "positives_path": "runs/target_fishing_benchmarks/valid_positives.parquet",
+  "top_k": 1000
+}
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:14:29][⏱9s]
+❯ 
+
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:19:05]
+❯ python biosensia_target_fishing_benchmark.py \
+  --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+  --query-column query \
+  --pocket-column pocket \
+  --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+  --mol-path data/biosensia_finetune/valid.lmdb \
+  --pocket-path data/biosensia_finetune/valid.lmdb \
+  --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip_valid_exact \
+  --top-k 263 \
+  --metric-top-k 1,3,5,10,50,100,263
+python biosensia_target_fishing_benchmark.py \
+∙   --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+∙   --query-column query \
+∙   --pocket-column pocket \
+∙   --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+∙   --mol-path data/biosensia_finetune/valid.lmdb \
+∙   --pocket-path data/biosensia_finetune/valid.lmdb \
+∙   --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip_valid_exact \
+∙   --top-k 263 \
+∙   --metric-top-k 1,3,5,10,50,100,263
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+23567 0.1
+23567 0.1
+Embedding candidate pockets: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 263/263 [00:05<00:00, 47.46pocket/s]
+Traceback (most recent call last):
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 206, in <module>
+    main()
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 179, in main
+    result = run_target_fishing_benchmark(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing_benchmark.py", line 101, in run_target_fishing_benchmark
+    rankings, _scores = retrieve_pocket_rankings_from_drugclip(args)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/biosensia_target_fishing.py", line 718, in retrieve_pocket_rankings_from_drugclip
+    return task.rank_pockets_by_query(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 1415, in rank_pockets_by_query
+    mol_reps, mol_names = self.encode_query_mols(
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 1139, in encode_query_mols
+    mol_dataset = self.load_retrieval_mols_dataset(data_path, atoms, coords)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/unimol/tasks/drugclip.py", line 574, in load_retrieval_mols_dataset
+    dataset = LMDBDataset(data_path)
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/unicore/data/lmdb_dataset.py", line 22, in __init__
+    env = self.connect_db(self.db_path)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fernando.amaral/BioSensIA/BioSensIA-DC/.venv/lib/python3.11/site-packages/unicore/data/lmdb_dataset.py", line 27, in connect_db
+    env = lmdb.open(
+          ^^^^^^^^^^
+lmdb.Error: The environment '/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune/valid.lmdb' is already open in this process.
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:19:20][⏱11s]
+✗ exit
+srun: error: pedro-alvares-cabral: task 0: Exited with exit code 1
+
+[master][$!?][fernando.amaral]🌐 mgt1 in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:19:46][⏱1h9m38s]
+✗ srun --partition=gpu --gres=gpu:1 --time=05:00:00 --pty bash
+Enter passphrase for /home/fernando.amaral/.ssh/id_ed25519_github: 
+Identity added: /home/fernando.amaral/.ssh/id_ed25519_github (github-sagres-fernando.amaral@mgt1)
+Lifetime set to 28800 seconds
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:19:56][⏱3s]
+❯ vact
+vact
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:19:59]
+❯ python biosensia_target_fishing_benchmark.py \
+  --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+  --query-column query \
+  --pocket-column pocket \
+  --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+  --mol-path data/biosensia_finetune/valid.lmdb \
+  --pocket-path data/biosensia_finetune/valid.lmdb \
+  --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip_valid_exact \
+  --top-k 263 \
+  --metric-top-k 1,3,5,10,50,100,263
+python biosensia_target_fishing_benchmark.py \
+∙   --positives-path runs/target_fishing_benchmarks/valid_positives.parquet \
+∙   --query-column query \
+∙   --pocket-column pocket \
+∙   --checkpoint-path external/DrugCLIP/checkpoint_best.pt \
+∙   --mol-path data/biosensia_finetune/valid.lmdb \
+∙   --pocket-path data/biosensia_finetune/valid.lmdb \
+∙   --emb-dir runs/target_fishing_benchmarks/emb/original_drugclip_valid_exact \
+∙   --top-k 263 \
+∙   --metric-top-k 1,3,5,10,50,100,263
+fused_multi_tensor is not installed corrected
+fused_rounding is not installed corrected
+fused_layer_norm is not installed corrected
+fused_rms_norm is not installed corrected
+fused_softmax is not installed corrected
+23567 0.1
+23567 0.1
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 132/132 [00:01<00:00, 87.54it/s]
+{
+  "checkpoint_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/external/DrugCLIP/checkpoint_best.pt",
+  "metrics": {
+    "mrr": 0.5457948832697076,
+    "queries": 263.0,
+    "recall_at_1": 0.376425855513308,
+    "recall_at_10": 0.8669201520912547,
+    "recall_at_100": 0.973384030418251,
+    "recall_at_263": 1.0,
+    "recall_at_3": 0.6615969581749049,
+    "recall_at_5": 0.7832699619771863,
+    "recall_at_50": 0.9467680608365019,
+    "top100_accuracy": 0.973384030418251,
+    "top10_accuracy": 0.8669201520912547,
+    "top1_accuracy": 0.376425855513308,
+    "top263_accuracy": 1.0,
+    "top3_accuracy": 0.6615969581749049,
+    "top50_accuracy": 0.9467680608365019,
+    "top5_accuracy": 0.7832699619771863
+  },
+  "mol_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune/valid.lmdb",
+  "pocket_path": "/home/fernando.amaral/BioSensIA/BioSensIA-DC/data/biosensia_finetune/valid.lmdb",
+  "positives_path": "runs/target_fishing_benchmarks/valid_positives.parquet",
+  "top_k": 263
+}
+
+[master][$!?][fernando.amaral]🌐 pedro-alvares-cabral in [~/BioSensIA/BioSensIA-DC](biosensia-dc) [v3.11.9] [16:20:09][⏱6s]
+❯
