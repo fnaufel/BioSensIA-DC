@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+# marimo
+**/__marimo__/cache/
+
 # Virtual environments
 .venv
 
@@ -33,3 +36,5 @@ runs/
 data/biosensia_finetune/*.txt
 data/biosensia_finetune/*.lmdb
 external/DrugCLIP/tsb_dir/
+/scratch/train.parquet
+/scratch/valid.parquet

@@ -11,5 +11,9 @@
     "**/jobs/**": true,
     "external/DrugCLIP/data/**": true,
     "external/unimol/data/**": true
-  }
+  },
+  "docsView.documentationView.updateMode": "sticky",
+  "chatgpt.followUpQueueMode": "steer",
+  "chatgpt.openOnStartup": true,
+  "chatgpt.commentCodeLensEnabled": false
 }
