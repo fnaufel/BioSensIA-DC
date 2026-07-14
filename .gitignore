@@ -38,3 +38,4 @@ data/biosensia_finetune/*.lmdb
 external/DrugCLIP/tsb_dir/
 /scratch/train.parquet
 /scratch/valid.parquet
+/benchmar_audit_files/

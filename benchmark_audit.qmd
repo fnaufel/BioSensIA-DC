@@ -1,0 +1,189 @@
+---
+title: "*Benchmark* do BioSensIA: primeira tentativa"
+format: html
+---
+
+
+```{python}
+#| label: setup
+#| echo: false
+import lmdb_helpers as lm
+from pathlib import Path
+from pprint import pprint
+import polars as pl
+import re
+
+def load_lmdb_or_read_parquet_file(path):
+    parquet_path = Path("scratch") / f"{Path(path).stem}.parquet"
+    if parquet_path.exists():
+        print(f'Reading PARQUET file {parquet_path}.')
+        df = pl.read_parquet(parquet_path)
+    else:
+        print(f'Reading LMDB file {path}.')
+        records = lm.read_lmdb_records(path)
+        # Represent objects as strings to write to parquet:
+        df = pl.DataFrame(records).with_columns(
+            pl.col('mol').map_elements(
+                lambda value: None if value is None else str(value),
+                return_dtype=pl.String,
+            )
+        )
+        print(f'Writing PARQUET file {parquet_path}.')
+        df.write_parquet(str(parquet_path))
+    return df
+```
+
+
+## Introdução
+
+Em junho e julho de 2026, os ajustes descritos do relatório "BioSensIA-DC: *fine-tuning*" foram implementados.
+
+O passo seguinte foi realizar um primeiro *benchmark*. Para tanto, foi preciso definir:
+
+- Um **conjunto de validação** contendo as moléculas a ser submetidas como consulta.
+- Uma biblioteca de ***pockets* candidatos**.
+- Uma **tabela de positivos** contendo a associação entre as moléculas do conjunto de validação e seus *pockets* positivos.
+- **Métricas** a serem avaliadas.
+
+Este documento descreve as decisões tomadas, os problemas encontrados, as hipóteses formuladas e as soluções propostas.
+
+## Conjunto de validação
+
+Os dados em `data/biosensia_finetune/valid.lmdb` foram reservados para validação. Este foi o arquivo submetido como consulta no *benchmark*.
+
+Este conjunto de dados foi construído a partir do conteúdo do arquivo `train_no_test_af.zip`, que estava no diretório do Google Drive indicado no [README do DrugCLIP](external/DrugCLIP/README.md).
+
+O arquivo original continha, para cada complexo, os campos
+
+- `atoms`: lista de átomos do ligante.
+- `coordinates`: lista de conformações geradas pelo RDKit para o ligante. Cada conformação é uma matriz de dimensões $\text{número de átomos} \times 3$.
+- `pocket_atoms`: lista de átomos do *pocket*.
+- `pocket_coordinates`: uma **única** geometria do *pocket*.
+- `mol`: objeto RDKit para o ligante.
+- `smi`: fórmula SMILES do ligante.
+- `pocket`: identificador PDB do *pocket*.
+
+Nós acrescentamos os seguintes campos, basicamente contendo metadados sobre os ligantes e os *pockets*:
+
+- `ligand_key`.
+- `pocket_key`.
+- `biosensia_ligand_policy`.
+- `biosensia_pocket_policy`.
+
+```{python}
+df_valid = load_lmdb_or_read_parquet_file('data/biosensia_finetune/valid.lmdb')
+```
+
+
+```{python}
+df_valid.glimpse()
+```
+
+Não há repetição de *pockets* nem de ligantes no conjunto de validação:
+
+
+```{python}
+df_valid.select(
+    pl.col('smi').n_unique(),
+    pl.col('pocket').n_unique(),
+)
+```
+
+## Biblioteca de *pockets* candidatos
+
+Para poupar trabalho, usamos, como conjunto de *pockets* candidatos, o mesmo arquivo que foi usado para fazer o *fine-tuning* do BioSensIA-DC: `data/biosensia_finetune/train.lmdb`.
+
+Este conjunto de dados foi construído a partir do conteúdo do arquivo `train_no_test_af.zip`, que estava no diretório do Google Drive indicado no [README do DrugCLIP](external/DrugCLIP/README.md).
+
+Segundo o README, o arquivo original foi compilado a partir do [PDBbind](https://www.pdbbind-plus.org.cn), **com registros adicionais criados por HomoAug**, a estratégia de aumento de dados proposta pelos autores do DrugCLIP.
+
+O arquivo original continha, para cada complexo, os campos
+
+- `atoms`: lista de átomos do ligante.
+- `coordinates`: lista de conformações geradas pelo RDKit para o ligante. Cada conformação é uma matriz de dimensões $\text{número de átomos} \times 3$.
+- `pocket_atoms`: lista de átomos do *pocket*.
+- `pocket_coordinates`: uma **única** geometria do *pocket*.
+- `mol`: objeto RDKit para o ligante.
+- `smi`: fórmula SMILES do ligante.
+- `pocket`: identificador PDB do *pocket*.
+
+Nós acrescentamos os seguintes campos, basicamente contendo metadados sobre os ligantes e os *pockets*:
+
+- `ligand_key`.
+- `pocket_key`.
+- `biosensia_ligand_policy`.
+- `biosensia_pocket_policy`.
+
+
+```{python}
+df_candidates = load_lmdb_or_read_parquet_file('data/biosensia_finetune/train.lmdb')
+```
+
+
+```{python}
+df_candidates.glimpse()
+```
+
+Alguns exemplos:
+
+```{python}
+from itables import show
+
+show(
+    df_candidates.head(20).select(
+        pl.col('^.*policy$'),
+        pl.col('pocket'),
+        pl.col('smi'),
+    )
+)
+```
+
+
+No conjunto de *pockets* candidatos, não existe par que apareça só uma vez!
+
+
+```{python}
+#| output: asis
+df_unique_pairs = df_candidates.group_by(
+    'pocket', 'smi'
+).len().sort('len', descending=True)
+
+print(
+    f'''
+    - Número de registros no arquivo: {df_candidates.height}.
+    - Número de pares únicos: {df_unique_pairs.height}.
+    - Número mínimo de repetições: {df_unique_pairs.select(pl.col('len').min()).item()}.
+    - Número máximo de repetições: {df_unique_pairs.select(pl.col('len').max()).item()}.
+    '''
+)
+```
+
+É importante verificar os identificadores dos *pockets*:
+
+
+```{python}
+df_candidate_pocket_names = df_unique_pairs.select(
+    'pocket',
+    id_length=pl.col('pocket').str.len_chars(),
+)
+
+df_candidate_pocket_names.select(
+    pl.col('id_length').unique()
+)
+```
+
+
+```{python}
+PDB_ID_RE = re.compile(r"^[0-9][A-Za-z0-9]{3}$")
+all_pocket_ids_match = df_candidate_pocket_names.select(
+    pl.col('pocket').str.contains(PDB_ID_RE.pattern).all()
+).item()
+all_pocket_ids_match
+```
+
+### Conclusões
+
+- Todos os ids de *pockets* no conjunto de *pockets* candidatos são da forma usada pelo PDB (4 caracteres alfanuméricos, dos quais o primeiro é um dígito).
+- Todos os pares *pocket*-ligante aparecem repetidos 2, 3, ou 4 vezes.
+- Esta repetição deve ter sido causada pela estratégia de aumento de dados (HomoAug).
+- Se a HomoAug gerou pares novos, os *pockets* não ganharam ids novos.
