@@ -1,0 +1,547 @@
+---
+title: "BioSensIA-DC: anotação de entradas PDB com identificadores UniProt"
+lang: pt
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-copy: true
+execute:
+  eval: false
+---
+
+# Objetivo
+
+Este documento especifica e descreve a implementação contida em
+`biosensia_uniprot_enrichment.py`.
+
+O objetivo é anotar os registros de *pockets* usados pelo BioSensIA-DC com os
+identificadores UniProt das **entidades proteicas presentes na entrada PDB**
+referenciada por `record["pocket"]`.
+
+Esta formulação é deliberadamente restrita:
+
+- Não identificamos qual proteína contém o *pocket*.
+- Não afirmamos que todas as proteínas da entrada estejam em contato com o
+  ligante ou com a geometria do *pocket*.
+- Não tentamos construir uma ontologia de sítios de ligação.
+- Não usamos as coordenadas do *pocket* para escolher uma cadeia.
+- Preservamos todas as ambiguidades produzidas pelo mapeamento no nível da
+  entrada PDB.
+
+O resultado permite agregar escores produzidos no nível dos *pockets* por
+proteína, desde que os resultados sejam interpretados como evidência associada
+a uma entrada estrutural, e não como atribuição inequívoca do *pocket* a uma
+proteína específica.
+
+# Requisito de compatibilidade
+
+O campo original é preservado sem alterações:
+
+```python
+record["pocket"]
+```
+
+Esse campo continua contendo o identificador original, inclusive sua
+capitalização original. As consultas à API e as junções usam um campo novo,
+normalizado:
+
+```python
+record["pdb_id"]
+```
+
+Por exemplo, um registro com `record["pocket"] == "2ie4"` continua contendo
+`"2ie4"` depois do enriquecimento, enquanto recebe
+`record["pdb_id"] == "2IE4"`.
+
+O carregador de *pockets* do DrugCLIP utiliza `pocket`, `pocket_atoms` e
+`pocket_coordinates` e ignora campos adicionais. Portanto, o LMDB enriquecido
+pode ser usado diretamente como biblioteca candidata pelo BioSensIA-DC.
+
+# Fonte dos metadados
+
+Usamos a [RCSB PDB Data API](https://data.rcsb.org/), por meio do endpoint
+GraphQL:
+
+```text
+https://data.rcsb.org/graphql
+```
+
+A consulta foi escrita de acordo com o esquema documentado pelo RCSB em julho
+de 2026. Em particular:
+
+- O tipo normalizado do polímero está em
+  `entity_poly.rcsb_entity_polymer_type`.
+- A descrição da entidade está em
+  `rcsb_polymer_entity.pdbx_description`.
+- Os identificadores de referência estão em
+  `rcsb_polymer_entity_container_identifiers.reference_sequence_identifiers`.
+- O identificador de cadeia `label_asym_id` corresponde a `asym_ids`.
+- O identificador de cadeia informado pelo autor corresponde a
+  `auth_asym_ids`.
+
+A consulta implementada é:
+
+```graphql
+query EntryProteinMappings($ids: [String!]!) {
+  entries(entry_ids: $ids) {
+    rcsb_id
+    polymer_entities {
+      rcsb_id
+      entity_poly {
+        type
+        rcsb_entity_polymer_type
+      }
+      rcsb_polymer_entity {
+        pdbx_description
+      }
+      rcsb_polymer_entity_container_identifiers {
+        entity_id
+        asym_ids
+        auth_asym_ids
+        reference_sequence_identifiers {
+          database_name
+          database_accession
+          database_isoform
+          provenance_source
+          entity_sequence_coverage
+          reference_sequence_coverage
+        }
+      }
+      rcsb_entity_source_organism {
+        ncbi_scientific_name
+        ncbi_taxonomy_id
+      }
+    }
+  }
+}
+```
+
+Somente referências cujo `database_name`, sem distinção entre maiúsculas e
+minúsculas, seja `UNIPROT` são conservadas.
+
+# Semântica dos identificadores
+
+## Identificador PDB
+
+Para os conjuntos DrugCLIP/BioSensIA atuais, consideramos PDB-like um valor que
+satisfaça:
+
+```python
+r"^[0-9][A-Za-z0-9]{3}$"
+```
+
+O valor original é mantido em `raw_pocket_id` ou `record["pocket"]`. A forma
+em maiúsculas é usada como `pdb_id`.
+
+Valores não compatíveis recebem o estado `non_pdb_pocket_id` e não são enviados
+ao RCSB.
+
+## Identificador UniProt e isoformas
+
+Conservamos separadamente:
+
+- `uniprot_accession`: `database_accession` devolvido pelo RCSB.
+- `uniprot_isoform`: `database_isoform`, quando disponível.
+- `mapping_provenance`: fonte biológica da associação, por exemplo `SIFTS`.
+- Cobertura da sequência da entidade e da sequência de referência.
+
+A agregação proteica usa `uniprot_accession`. Isoformas são preservadas nos
+metadados para auditoria, mas não criam grupos de ranking separados. Essa
+decisão evita misturar silenciosamente o conceito de acesso principal UniProt
+com a escolha feita pelo *pipeline*.
+
+O campo usado para uma seleção inequívoca chama-se
+`selected_uniprot_accession`, e não `primary_uniprot_accession`.
+
+# Estados de mapeamento
+
+A classificação considera primeiro a completude no nível das entidades e
+somente depois o número de acessos UniProt distintos.
+
+| Estado | Significado |
+|---|---|
+| `ok_single_uniprot` | Existe uma entidade proteica, ela está mapeada e há um único acesso UniProt. |
+| `ok_multiple_entities_same_uniprot` | Todas as entidades proteicas estão mapeadas e produzem o mesmo acesso UniProt. |
+| `ambiguous_multiple_uniprot` | O mapeamento completo produz mais de um acesso UniProt, seja entre entidades ou dentro de uma entidade quimérica. |
+| `partial_uniprot_mapping` | Algumas entidades proteicas têm acesso UniProt e outras não. |
+| `no_uniprot_mapping` | Existem entidades proteicas, mas nenhuma tem acesso UniProt. |
+| `no_protein_entity` | A entrada devolvida não contém entidade polimérica classificada como proteína. |
+| `pdb_not_found` | A resposta válida não contém a entrada PDB solicitada. |
+| `graphql_error` | Não foi possível obter uma resposta GraphQL utilizável para o PDB. |
+| `non_pdb_pocket_id` | O valor original não segue a forma PDB usada pelo conjunto de dados. |
+| `pdb_metadata_missing` | Uma linha LMDB não encontrou metadados no dicionário fornecido à junção. |
+
+O estado `partial_uniprot_mapping` tem precedência sobre a aparente unicidade.
+Por exemplo, se uma entrada tem três entidades proteicas e somente uma delas
+mapeia para `P12345`, `selected_uniprot_accession` permanece nulo. As duas
+entidades sem mapeamento podem corresponder a outras proteínas.
+
+Erros GraphQL coexistentes com dados válidos são registrados em
+`graphql_status == "partial_error"` e em `metadata_warnings`. A classificação
+biológica da entrada continua disponível em `entry_mapping_status`.
+
+# Modelo de dados
+
+São produzidas três tabelas Parquet complementares.
+
+## Tabela por entrada PDB
+
+Arquivo:
+
+```text
+data/pdb_uniprot_metadata.parquet
+```
+
+Há uma linha por `pdb_id`. Ela contém listas-resumo, contagens de entidades,
+estado, horário de recuperação, hash da consulta e uma representação JSON das
+entidades normalizadas.
+
+Essa tabela é conveniente para inspeção e para junções em que somente o estado
+global da entrada é necessário.
+
+## Relação entidade--UniProt
+
+Arquivo:
+
+```text
+data/pdb_entity_uniprot_metadata.parquet
+```
+
+Esta é a tabela normalizada principal. Há uma linha para cada relação:
+
+```text
+(pdb_id, rcsb_polymer_entity_id, uniprot_accession)
+```
+
+Uma entidade proteica sem mapeamento também recebe uma linha, com
+`uniprot_accession` nulo. Isso permite observar entidades ausentes nos casos
+`partial_uniprot_mapping` e `no_uniprot_mapping`.
+
+Descrição, organismo, taxonomia, cadeias, isoforma, proveniência e cobertura
+permanecem associados à entidade e ao acesso corretos. Não dependemos de listas
+paralelas que poderiam perder essas relações.
+
+## Tabela por registro LMDB
+
+Arquivo:
+
+```text
+data/pocket_uniprot_metadata.parquet
+```
+
+Há uma linha para cada identidade:
+
+```text
+(source_split, source_lmdb_key)
+```
+
+Ela inclui:
+
+- O identificador original e o PDB normalizado.
+- Listas-resumo das proteínas presentes na entrada.
+- A seleção UniProt somente quando inequívoca.
+- Entidades e cadeias.
+- Contagens de entidades totais e mapeadas.
+- Estado, método, fonte, horário e hash da consulta.
+- Avisos de qualidade.
+- `pocket_geometry_hash`, quando já disponível no LMDB.
+
+# Cache e reprodutibilidade
+
+O diretório padrão é:
+
+```text
+data/pdb_graphql_cache/
+```
+
+Arquivos normalizados por PDB:
+
+```text
+data/pdb_graphql_cache/2IE4.json
+```
+
+Respostas brutas por lote:
+
+```text
+data/pdb_graphql_cache/_raw/<timestamp>_<hash>.json
+```
+
+Os arquivos normalizados contêm:
+
+- Versão do esquema local do cache.
+- SHA-256 da consulta GraphQL.
+- Horário UTC de recuperação.
+- Fonte e método.
+- Estado e avisos.
+- Entidades proteicas normalizadas.
+- Objeto bruto da entrada GraphQL.
+
+Os arquivos brutos conservam endpoint, consulta, variáveis e resposta completa.
+Assim, uma nova normalização pode ser auditada sem confundir o formato externo
+com o formato estável usado pelo BioSensIA-DC.
+
+Um cache somente é reutilizado quando sua versão e o hash da consulta são
+compatíveis. Entradas `graphql_error` são registradas, mas tentadas novamente
+por padrão para evitar que uma falha transitória se torne permanente.
+
+# Comportamento de rede
+
+As consultas usam POST JSON em lotes, com tamanho padrão 100. O tamanho é
+configurável.
+
+O transporte padrão:
+
+- Define timeout explícito.
+- Envia `User-Agent`, `Accept` e `Content-Type`.
+- Repete erros de conexão, timeout, HTTP 429 e HTTP 5xx.
+- Usa espera exponencial e respeita `Retry-After` numérico.
+- Não repete automaticamente erros HTTP permanentes.
+- Verifica respostas HTTP 200 que ainda contêm erros GraphQL.
+- Processa dados parciais quando `data.entries` é utilizável.
+- Reconcilia os IDs solicitados com os IDs efetivamente devolvidos.
+- Divide recursivamente lotes rejeitados com HTTP 413 ou 414.
+
+# Uso básico
+
+## Construir os três sidecars
+
+```python
+from pathlib import Path
+
+import polars as pl
+
+from biosensia_uniprot_enrichment import build_uniprot_metadata_sidecars
+
+result = build_uniprot_metadata_sidecars(
+    {
+        "train": Path("data/biosensia_finetune/train.lmdb"),
+        "valid": Path("data/biosensia_finetune/valid.lmdb"),
+    },
+    output_dir=Path("data"),
+    cache_dir=Path("data/pdb_graphql_cache"),
+    batch_size=100,
+)
+
+pdb_metadata = result["pdb_metadata"]
+entity_metadata = result["entity_metadata"]
+row_metadata = result["row_metadata"]
+```
+
+A função não altera os LMDBs de origem.
+
+## Inspecionar a qualidade
+
+```python
+(
+    result["row_metadata"]
+    .group_by("protein_mapping_status")
+    .len()
+    .sort("len", descending=True)
+)
+```
+
+```python
+result["pdb_metadata"].filter(
+    pl.col("entry_mapping_status") == "ambiguous_multiple_uniprot"
+)
+```
+
+```python
+result["entity_metadata"].filter(
+    pl.col("pdb_id") == "2IE4"
+)
+```
+
+## Criar LMDB enriquecido por *split*
+
+```python
+from biosensia_uniprot_enrichment import write_enriched_lmdb
+
+write_enriched_lmdb(
+    "data/biosensia_finetune/train.lmdb",
+    result["row_metadata"],
+    "data/train.enriched.lmdb",
+    source_split="train",
+)
+
+write_enriched_lmdb(
+    "data/biosensia_finetune/valid.lmdb",
+    result["row_metadata"],
+    "data/valid.enriched.lmdb",
+    source_split="valid",
+)
+```
+
+## Enriquecer uma biblioteca candidata concatenada
+
+Uma biblioteca criada por `build_candidate_pockets_lmdb` já contém
+`source_split` e `source_lmdb_key`. Portanto, não é necessário passar um
+*split* único:
+
+```python
+write_enriched_lmdb(
+    "data/candidate_pockets.lmdb",
+    result["row_metadata"],
+    "data/candidate_pockets.enriched.lmdb",
+)
+```
+
+Depois disso, o caminho enriquecido pode ser passado normalmente como
+`pocket_path` às funções de *target fishing*.
+
+# Campos acrescentados ao LMDB
+
+O LMDB enriquecido recebe somente metadados compactos:
+
+```text
+pdb_id
+entry_uniprot_accessions
+entry_uniprot_isoforms
+selected_uniprot_accession
+entry_protein_names
+entry_organisms
+entry_organism_taxonomy_ids
+entry_rcsb_polymer_entity_ids
+entry_label_asym_ids
+entry_auth_asym_ids
+protein_entity_count
+mapped_protein_entity_count
+protein_mapping_method
+protein_mapping_status
+protein_mapping_source
+protein_mapping_retrieved_at
+protein_mapping_query_sha256
+protein_metadata_warnings
+```
+
+Respostas GraphQL completas não são copiadas para o LMDB.
+
+# Agregação dos rankings
+
+## Regra inicial
+
+Para uma consulta molecular e um acesso UniProt:
+
+```text
+protein_score = max(score dos pockets que apoiam o acesso)
+```
+
+O máximo é uma regra de descoberta simples, não uma probabilidade calibrada.
+Proteínas representadas por mais estruturas ou geometrias aumentadas têm mais
+oportunidades de produzir um valor extremo. Por isso, o relatório conserva
+contagens e proveniência suficientes para diagnosticar esse efeito.
+
+## Modo estrito
+
+```python
+from biosensia_uniprot_enrichment import aggregate_pocket_scores_by_protein
+
+protein_ranking = aggregate_pocket_scores_by_protein(
+    ranked_pockets,
+    result["entity_metadata"],
+    ambiguity_mode="strict",
+)
+```
+
+Somente `ok_single_uniprot` e `ok_multiple_entities_same_uniprot` contribuem.
+
+## Modo exploratório
+
+```python
+protein_ranking = aggregate_pocket_scores_by_protein(
+    ranked_pockets,
+    result["entity_metadata"],
+    ambiguity_mode="exploratory",
+)
+```
+
+O escore de uma entrada ambígua é atribuído a todos os acessos nela reportados.
+Essas evidências são marcadas por `has_ambiguous_support` e pelos estados de
+mapeamento associados.
+
+## Conteúdo do relatório
+
+Cada proteína recebe:
+
+- Posição e escore agregado.
+- Nomes e organismos associados ao acesso nas entidades estruturais.
+- Melhor *pocket*, melhor PDB e melhor estado de suporte.
+- `source_split`, `source_lmdb_key` e hash geométrico do melhor suporte, quando
+  essas colunas estiverem presentes no ranking de entrada.
+- Número de linhas candidatas que apoiam a proteína.
+- Número de PDBs distintos.
+- Todos os PDBs, *pockets* e estados de suporte.
+- Indicador de suporte ambíguo.
+- JSON detalhado de todas as evidências.
+- Método de agregação e modo de ambiguidade.
+
+Se a tabela de ranking não tiver uma coluna de consulta, todas as linhas são
+atribuídas à consulta sintética `__single_query__`.
+
+# Validação recomendada
+
+Antes de interpretar os rankings completos:
+
+1. Contar linhas por estado no nível dos registros e dos PDBs.
+2. Contar entidades proteicas totais e mapeadas.
+3. Inspecionar exemplos de todos os estados.
+4. Verificar entradas com múltiplas entidades e entidades com múltiplos
+   acessos.
+5. Verificar cadeias `label_asym_id` e `auth_asym_id` separadamente.
+6. Comparar rankings estritos e exploratórios.
+7. Comparar `support_count` com `unique_pdb_count`.
+8. Examinar proteínas com muitas estruturas, pois o máximo pode favorecê-las.
+9. Confirmar que `record["pocket"]` é idêntico antes e depois do enriquecimento.
+10. Regenerar o cache de *embeddings* do DrugCLIP ao substituir a biblioteca
+    candidata, pois o nome do LMDB pode não refletir mudanças de conteúdo.
+
+# Testes automatizados
+
+Os testes em `tests/test_uniprot_enrichment.py` cobrem:
+
+- Campos da consulta GraphQL.
+- Validação e normalização de PDB IDs.
+- Todos os estados de mapeamento.
+- Entidades não proteicas.
+- Proveniência, isoforma, cobertura, organismo e cadeias.
+- Respostas GraphQL parciais e inválidas.
+- Repetição após falha de rede.
+- Cache válido, cache de erro e PDB ausente.
+- Divisão de lotes grandes.
+- Três esquemas Parquet.
+- Seleção conservadora de um único acesso.
+- Preservação exata de `record["pocket"]`.
+- Enriquecimento de um *split* e de uma biblioteca com proveniência embutida.
+- Agregação estrita e exploratória.
+- Um fluxo sintético completo, do LMDB aos sidecars e ao LMDB enriquecido.
+
+Para executá-los:
+
+```bash
+uv run pytest -q tests/test_uniprot_enrichment.py
+```
+
+Para executar toda a suíte do projeto:
+
+```bash
+uv run pytest -q
+```
+
+# Limitações assumidas
+
+O enriquecimento associa uma linha LMDB às proteínas presentes na entrada PDB.
+Ele não decide qual entidade contém o *pocket*. Consequentemente:
+
+- Complexos heteroméricos geralmente produzem vários acessos.
+- Anticorpos, parceiros regulatórios, chaperonas e proteínas de fusão podem
+  aparecer como candidatos.
+- Uma entidade quimérica pode mapear para vários acessos.
+- Uma entrada parcialmente mapeada não permite seleção segura mesmo quando
+  somente um acesso é conhecido.
+- O modo exploratório replica um escore entre acessos ambíguos e deve ser
+  interpretado como geração de hipóteses.
+
+Uma etapa futura pode usar contatos ligante--cadeia ou coordenadas para reduzir
+a ambiguidade, sem invalidar os sidecars produzidos aqui.

@@ -1,0 +1,1699 @@
+"""RCSB-backed UniProt metadata enrichment for BioSensIA pocket libraries.
+
+The functions in this module deliberately perform *entry-level* annotation.
+Given a PDB-like value stored in ``record["pocket"]``, they discover the
+protein polymer entities present in that PDB entry and the UniProt references
+reported for those entities.  They do not claim that every returned protein
+contains, contacts, or biologically owns the pocket represented by the LMDB
+record.
+
+The implementation keeps the original ``pocket`` value unchanged.  Enriched
+LMDB files therefore remain compatible with DrugCLIP/BioSensIA target-fishing
+loaders while carrying additional metadata in new fields.  Full normalized
+metadata is stored in Parquet sidecars and per-PDB JSON cache files so API
+responses can be audited and normalization can evolve without rewriting the
+source LMDB files.
+"""
+
+from __future__ import annotations
+
+import json
+import pickle
+import re
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from datetime import UTC, datetime
+from hashlib import sha256
+from pathlib import Path
+from typing import Any
+
+import lmdb
+import polars as pl
+
+
+RCSB_GRAPHQL_ENDPOINT = "https://data.rcsb.org/graphql"
+RCSB_MAPPING_SOURCE = "RCSB PDB Data API GraphQL"
+RCSB_MAPPING_METHOD = "rcsb_graphql_entry_level"
+RCSB_USER_AGENT = "BioSensIA-DC/0.1 (PDB-to-UniProt metadata enrichment)"
+DEFAULT_GRAPHQL_BATCH_SIZE = 100
+DEFAULT_GRAPHQL_TIMEOUT_SECONDS = 60.0
+DEFAULT_CACHE_DIR = Path("data/pdb_graphql_cache")
+DEFAULT_PDB_METADATA_PATH = Path("data/pdb_uniprot_metadata.parquet")
+DEFAULT_ENTITY_METADATA_PATH = Path("data/pdb_entity_uniprot_metadata.parquet")
+DEFAULT_POCKET_METADATA_PATH = Path("data/pocket_uniprot_metadata.parquet")
+CACHE_SCHEMA_VERSION = "1"
+
+PDB_ID_RE = re.compile(r"^[0-9][A-Za-z0-9]{3}$")
+
+RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY = """
+query EntryProteinMappings($ids: [String!]!) {
+  entries(entry_ids: $ids) {
+    rcsb_id
+    polymer_entities {
+      rcsb_id
+      entity_poly {
+        type
+        rcsb_entity_polymer_type
+      }
+      rcsb_polymer_entity {
+        pdbx_description
+      }
+      rcsb_polymer_entity_container_identifiers {
+        entity_id
+        asym_ids
+        auth_asym_ids
+        reference_sequence_identifiers {
+          database_name
+          database_accession
+          database_isoform
+          provenance_source
+          entity_sequence_coverage
+          reference_sequence_coverage
+        }
+      }
+      rcsb_entity_source_organism {
+        ncbi_scientific_name
+        ncbi_taxonomy_id
+      }
+    }
+  }
+}
+""".strip()
+
+RCSB_QUERY_SHA256 = sha256(
+    RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY.encode("utf-8")
+).hexdigest()
+
+UNAMBIGUOUS_MAPPING_STATUSES = frozenset(
+    {"ok_single_uniprot", "ok_multiple_entities_same_uniprot"}
+)
+
+PDB_METADATA_SCHEMA = {
+    "pdb_id": pl.String,
+    "all_uniprot_accessions": pl.List(pl.String),
+    "all_uniprot_isoforms": pl.List(pl.String),
+    "all_protein_names": pl.List(pl.String),
+    "all_organisms": pl.List(pl.String),
+    "all_organism_taxonomy_ids": pl.List(pl.String),
+    "rcsb_polymer_entity_ids": pl.List(pl.String),
+    "protein_entity_count": pl.Int64,
+    "mapped_protein_entity_count": pl.Int64,
+    "entry_mapping_status": pl.String,
+    "graphql_status": pl.String,
+    "retrieved_at": pl.String,
+    "mapping_source": pl.String,
+    "query_sha256": pl.String,
+    "protein_entities_json": pl.String,
+    "metadata_warnings": pl.List(pl.String),
+}
+
+ENTITY_METADATA_SCHEMA = {
+    "pdb_id": pl.String,
+    "rcsb_polymer_entity_id": pl.String,
+    "rcsb_id": pl.String,
+    "polymer_type": pl.String,
+    "entity_description": pl.String,
+    "label_asym_ids": pl.List(pl.String),
+    "auth_asym_ids": pl.List(pl.String),
+    "organism_names": pl.List(pl.String),
+    "organism_taxonomy_ids": pl.List(pl.String),
+    "uniprot_accession": pl.String,
+    "uniprot_isoform": pl.String,
+    "mapping_provenance": pl.String,
+    "entity_sequence_coverage": pl.Float64,
+    "reference_sequence_coverage": pl.Float64,
+    "entry_mapping_status": pl.String,
+    "retrieved_at": pl.String,
+}
+
+ROW_METADATA_SCHEMA = {
+    "source_split": pl.String,
+    "source_lmdb_key": pl.String,
+    "raw_pocket_id": pl.String,
+    "pdb_id": pl.String,
+    "pocket_geometry_hash": pl.String,
+    "entry_uniprot_accessions": pl.List(pl.String),
+    "entry_uniprot_isoforms": pl.List(pl.String),
+    "selected_uniprot_accession": pl.String,
+    "entry_protein_names": pl.List(pl.String),
+    "entry_organisms": pl.List(pl.String),
+    "entry_organism_taxonomy_ids": pl.List(pl.String),
+    "entry_rcsb_polymer_entity_ids": pl.List(pl.String),
+    "entry_label_asym_ids": pl.List(pl.List(pl.String)),
+    "entry_auth_asym_ids": pl.List(pl.List(pl.String)),
+    "protein_entity_count": pl.Int64,
+    "mapped_protein_entity_count": pl.Int64,
+    "protein_mapping_method": pl.String,
+    "protein_mapping_status": pl.String,
+    "protein_mapping_source": pl.String,
+    "protein_mapping_retrieved_at": pl.String,
+    "protein_mapping_query_sha256": pl.String,
+    "metadata_warnings": pl.List(pl.String),
+}
+
+PROTEIN_RANKING_SCHEMA = {
+    "query": pl.String,
+    "protein_rank": pl.Int64,
+    "uniprot_accession": pl.String,
+    "protein_score": pl.Float64,
+    "protein_names": pl.List(pl.String),
+    "organisms": pl.List(pl.String),
+    "organism_taxonomy_ids": pl.List(pl.String),
+    "best_pocket": pl.String,
+    "best_pdb_id": pl.String,
+    "best_source_split": pl.String,
+    "best_source_lmdb_key": pl.String,
+    "best_pocket_geometry_hash": pl.String,
+    "best_support_mapping_status": pl.String,
+    "support_count": pl.Int64,
+    "unique_pdb_count": pl.Int64,
+    "supporting_pdb_ids": pl.List(pl.String),
+    "supporting_pocket_ids": pl.List(pl.String),
+    "supporting_mapping_statuses": pl.List(pl.String),
+    "has_ambiguous_support": pl.Boolean,
+    "aggregation_method": pl.String,
+    "ambiguity_mode": pl.String,
+    "supporting_hits_json": pl.String,
+}
+
+
+class RCSBGraphQLError(RuntimeError):
+    """Represent a transport, HTTP, or unusable GraphQL response failure.
+
+    Parameters
+    ----------
+    message:
+        Human-readable failure description suitable for cache warnings.
+    status_code:
+        Optional HTTP status code.  Batch orchestration uses this to split
+        requests rejected as too large without treating schema errors as
+        retryable size failures.
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+GraphQLTransport = Callable[[str, Mapping[str, Any], float], Mapping[str, Any]]
+
+
+def utc_now_iso() -> str:
+    """Return an ISO-8601 UTC timestamp with second precision."""
+
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def is_pdb_id(value: object) -> bool:
+    """Return whether ``value`` is a classic four-character PDB identifier.
+
+    This validation intentionally reflects the identifiers present in the
+    DrugCLIP/BioSensIA datasets.  It does not classify AlphaFold or other
+    computed-model identifiers as PDB IDs.
+    """
+
+    return bool(PDB_ID_RE.fullmatch(str(value).strip())) if value is not None else False
+
+
+def canonicalize_pdb_id(value: object) -> str | None:
+    """Return an uppercase PDB ID or ``None`` for a non-PDB-like value."""
+
+    if not is_pdb_id(value):
+        return None
+    return str(value).strip().upper()
+
+
+def iter_lmdb_records(lmdb_path: str | Path) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield source key and unpickled record from a DrugCLIP-style LMDB.
+
+    Numeric ASCII keys are yielded numerically rather than lexicographically,
+    preserving the order expected by DrugCLIP datasets.  Non-numeric keys are
+    sorted bytewise.  The environment is opened read-only without locking so
+    this function can inspect large immutable datasets without copying them.
+
+    Parameters
+    ----------
+    lmdb_path:
+        Path to a single-file, pickle-backed LMDB.
+
+    Yields
+    ------
+    tuple[str, dict[str, Any]]
+        Decoded LMDB key and deserialized dictionary record.
+    """
+
+    path = Path(lmdb_path)
+    if not path.exists():
+        raise FileNotFoundError(f"LMDB not found: {path}")
+
+    environment = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with environment.begin() as transaction:
+            keys = list(transaction.cursor().iternext(values=False))
+            keys = _sort_lmdb_keys(keys)
+            for key in keys:
+                value = transaction.get(key)
+                if value is None:
+                    continue
+                record = pickle.loads(value)
+                if not isinstance(record, dict):
+                    raise TypeError(
+                        f"LMDB record {key!r} in {path} is not a dictionary"
+                    )
+                yield key.decode("ascii", errors="replace"), record
+    finally:
+        environment.close()
+
+
+def collect_lmdb_rows(
+    lmdb_paths: Mapping[str, str | Path],
+) -> list[dict[str, Any]]:
+    """Collect row identities and PDB-like pocket IDs from LMDB splits.
+
+    The returned lightweight rows are sufficient to build the row-level
+    metadata sidecar.  ``raw_pocket_id`` always preserves the source value;
+    ``pdb_id`` is an uppercase canonical join key or ``None``.  Existing
+    ``pocket_geometry_hash`` values are retained when present.
+
+    Parameters
+    ----------
+    lmdb_paths:
+        Mapping from logical split name, such as ``"train"``, to LMDB path.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        One row per LMDB record, including split, key, raw pocket value,
+        canonical PDB ID, and optional geometry hash.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for source_split, lmdb_path in lmdb_paths.items():
+        normalized_split = str(source_split).strip()
+        if not normalized_split:
+            raise ValueError("LMDB split names must be non-empty")
+        for source_key, record in iter_lmdb_records(lmdb_path):
+            raw_value = record.get("pocket")
+            raw_pocket_id = "" if raw_value is None else str(raw_value)
+            rows.append(
+                {
+                    "source_split": normalized_split,
+                    "source_lmdb_key": source_key,
+                    "raw_pocket_id": raw_pocket_id,
+                    "pdb_id": canonicalize_pdb_id(raw_pocket_id),
+                    "pocket_geometry_hash": _optional_string(
+                        record.get("pocket_geometry_hash")
+                    ),
+                }
+            )
+    return rows
+
+
+def collect_unique_pdb_ids(rows: Iterable[Mapping[str, Any]]) -> set[str]:
+    """Return canonical PDB IDs present in lightweight LMDB row metadata."""
+
+    return {
+        str(row["pdb_id"]).upper()
+        for row in rows
+        if row.get("pdb_id") is not None
+    }
+
+
+def fetch_rcsb_graphql_batch(
+    pdb_ids: Sequence[str],
+    *,
+    endpoint: str = RCSB_GRAPHQL_ENDPOINT,
+    timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
+    transport: GraphQLTransport | None = None,
+    max_retries: int = 4,
+    initial_backoff_seconds: float = 1.0,
+) -> dict[str, Any]:
+    """Fetch entry-level protein mappings for one batch of PDB IDs.
+
+    The function uses a JSON POST body and accepts GraphQL responses that
+    contain both ``data`` and ``errors`` so callers can retain partial data.
+    A response with errors but no usable ``data.entries`` raises
+    :class:`RCSBGraphQLError`.  HTTP 429 and 5xx responses, connection errors,
+    and timeouts are retried by the default transport with exponential
+    backoff.  Tests and offline workflows can inject a deterministic
+    ``transport`` callable.
+
+    Parameters
+    ----------
+    pdb_ids:
+        One or more classic PDB IDs.  IDs are canonicalized to uppercase.
+    endpoint:
+        RCSB GraphQL endpoint.
+    timeout_seconds:
+        Per-request network timeout.
+    transport:
+        Optional callable receiving ``(endpoint, payload, timeout_seconds)``
+        and returning the decoded JSON object.
+    max_retries:
+        Maximum retry count used by the default HTTP transport.
+    initial_backoff_seconds:
+        Initial exponential-backoff delay.
+
+    Returns
+    -------
+    dict[str, Any]
+        Decoded GraphQL response containing ``data`` and optionally ``errors``.
+    """
+
+    canonical_ids = _validate_pdb_ids(pdb_ids)
+    if not canonical_ids:
+        raise ValueError("pdb_ids must contain at least one PDB ID")
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be greater than 0")
+
+    payload = {
+        "query": RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY,
+        "variables": {"ids": canonical_ids},
+    }
+    if transport is None:
+        response = _post_json_with_retries(
+            endpoint,
+            payload,
+            timeout_seconds,
+            max_retries=max_retries,
+            initial_backoff_seconds=initial_backoff_seconds,
+        )
+    else:
+        response = transport(endpoint, payload, timeout_seconds)
+
+    if not isinstance(response, Mapping):
+        raise RCSBGraphQLError("GraphQL response is not a JSON object")
+    decoded = dict(response)
+    entries = (decoded.get("data") or {}).get("entries")
+    if entries is None:
+        errors = _graphql_error_messages(decoded.get("errors"))
+        detail = "; ".join(errors) if errors else "response has no data.entries"
+        raise RCSBGraphQLError(f"Unusable GraphQL response: {detail}")
+    if not isinstance(entries, list):
+        raise RCSBGraphQLError("GraphQL data.entries is not a list")
+    return decoded
+
+
+def normalize_rcsb_entry(
+    entry_json: Mapping[str, Any],
+    *,
+    retrieved_at: str | None = None,
+    graphql_errors: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Normalize one RCSB GraphQL entry into entry and entity metadata.
+
+    Only protein polymer entities are retained.  Protein classification uses
+    RCSB's normalized ``entity_poly.rcsb_entity_polymer_type`` field and falls
+    back to the raw PDBx polymer type for defensive compatibility.  UniProt
+    mappings preserve accession, isoform, provenance, and sequence coverage.
+
+    The entry status is based on mapping completeness:
+
+    * ``no_protein_entity``: no protein polymer entity was returned;
+    * ``no_uniprot_mapping``: protein entities exist but none map to UniProt;
+    * ``partial_uniprot_mapping``: only some protein entities map to UniProt;
+    * ``ok_single_uniprot``: one mapped entity and one unique accession;
+    * ``ok_multiple_entities_same_uniprot``: every protein entity maps and all
+      map to the same accession;
+    * ``ambiguous_multiple_uniprot``: complete mapping yields several unique
+      accessions, including multi-accession fusion/chimeric entities.
+
+    Parameters
+    ----------
+    entry_json:
+        One object from GraphQL ``data.entries``.
+    retrieved_at:
+        Retrieval timestamp.  Defaults to the current UTC time.
+    graphql_errors:
+        Batch-level GraphQL error messages retained as warnings.  Usable entry
+        data remains normalized and receives ``graphql_status="partial_error"``.
+
+    Returns
+    -------
+    dict[str, Any]
+        JSON-serializable normalized entry metadata with nested protein
+        entities and the original GraphQL entry for auditability.
+    """
+
+    pdb_id = canonicalize_pdb_id(entry_json.get("rcsb_id"))
+    if pdb_id is None:
+        raise ValueError("RCSB entry is missing a valid four-character rcsb_id")
+
+    protein_entities = []
+    for entity_json in entry_json.get("polymer_entities") or []:
+        if not isinstance(entity_json, Mapping) or not _is_protein_entity(entity_json):
+            continue
+        protein_entities.append(_normalize_protein_entity(pdb_id, entity_json))
+
+    accessions = _ordered_unique(
+        mapping["uniprot_accession"]
+        for entity in protein_entities
+        for mapping in entity["uniprot_mappings"]
+    )
+    isoforms = _ordered_unique(
+        mapping["uniprot_isoform"]
+        for entity in protein_entities
+        for mapping in entity["uniprot_mappings"]
+        if mapping["uniprot_isoform"] is not None
+    )
+    mapped_entity_count = sum(
+        bool(entity["uniprot_accessions"]) for entity in protein_entities
+    )
+    mapping_status = determine_entry_mapping_status(
+        protein_entity_count=len(protein_entities),
+        mapped_protein_entity_count=mapped_entity_count,
+        unique_uniprot_accession_count=len(accessions),
+    )
+    warnings = _ordered_unique(str(error) for error in graphql_errors if str(error))
+    if mapping_status == "partial_uniprot_mapping":
+        warnings.append(
+            f"Only {mapped_entity_count} of {len(protein_entities)} protein "
+            "entities have UniProt mappings."
+        )
+
+    return {
+        "pdb_id": pdb_id,
+        "retrieved_at": retrieved_at or utc_now_iso(),
+        "mapping_source": RCSB_MAPPING_SOURCE,
+        "mapping_method": RCSB_MAPPING_METHOD,
+        "query_sha256": RCSB_QUERY_SHA256,
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "entry_mapping_status": mapping_status,
+        "graphql_status": "partial_error" if warnings and graphql_errors else "ok",
+        "protein_entity_count": len(protein_entities),
+        "mapped_protein_entity_count": mapped_entity_count,
+        "protein_entities": protein_entities,
+        "all_uniprot_accessions": accessions,
+        "all_uniprot_isoforms": isoforms,
+        "all_protein_names": _ordered_unique(
+            entity["entity_description"]
+            for entity in protein_entities
+            if entity["entity_description"] is not None
+        ),
+        "all_organisms": _ordered_unique(
+            organism
+            for entity in protein_entities
+            for organism in entity["organism_names"]
+        ),
+        "all_organism_taxonomy_ids": _ordered_unique(
+            taxonomy_id
+            for entity in protein_entities
+            for taxonomy_id in entity["organism_taxonomy_ids"]
+        ),
+        "metadata_warnings": warnings,
+        "raw_graphql_entry": dict(entry_json),
+    }
+
+
+def determine_entry_mapping_status(
+    *,
+    protein_entity_count: int,
+    mapped_protein_entity_count: int,
+    unique_uniprot_accession_count: int,
+) -> str:
+    """Classify entry-level UniProt mapping completeness and ambiguity.
+
+    The decision order intentionally checks entity completeness before unique
+    accession cardinality.  This prevents an entry with one mapped protein and
+    several unmapped proteins from being mislabeled ``ok_single_uniprot`` and
+    keeps ``ok_multiple_entities_same_uniprot`` reachable.
+    """
+
+    if min(
+        protein_entity_count,
+        mapped_protein_entity_count,
+        unique_uniprot_accession_count,
+    ) < 0:
+        raise ValueError("mapping counts must be non-negative")
+    if mapped_protein_entity_count > protein_entity_count:
+        raise ValueError("mapped protein entities cannot exceed protein entities")
+    if protein_entity_count == 0:
+        return "no_protein_entity"
+    if mapped_protein_entity_count == 0 or unique_uniprot_accession_count == 0:
+        return "no_uniprot_mapping"
+    if mapped_protein_entity_count < protein_entity_count:
+        return "partial_uniprot_mapping"
+    if unique_uniprot_accession_count == 1:
+        if protein_entity_count > 1:
+            return "ok_multiple_entities_same_uniprot"
+        return "ok_single_uniprot"
+    return "ambiguous_multiple_uniprot"
+
+
+def build_pdb_uniprot_cache(
+    pdb_ids: Iterable[str],
+    cache_dir: str | Path = DEFAULT_CACHE_DIR,
+    *,
+    batch_size: int = DEFAULT_GRAPHQL_BATCH_SIZE,
+    refresh: bool = False,
+    retry_error_cache: bool = True,
+    endpoint: str = RCSB_GRAPHQL_ENDPOINT,
+    timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
+    transport: GraphQLTransport | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Build or reuse normalized per-PDB metadata cache files.
+
+    Successful and negative lookup results are written as ``<PDB>.json``.
+    Raw batch responses are written separately under ``_raw/`` with the exact
+    query, requested IDs, timestamp, and decoded response.  This separation
+    preserves reproducibility without making downstream code depend on the
+    external response shape.
+
+    Cached files are reused only when their cache schema and GraphQL query hash
+    match this module.  ``graphql_error`` cache entries remain available for
+    audit but are retried by default, avoiding permanent caching of transient
+    failures.  HTTP 413/414 batch failures are recursively split until a
+    request succeeds or a single PDB ID fails.
+
+    Parameters
+    ----------
+    pdb_ids:
+        Iterable of PDB IDs.  Duplicates are removed after canonicalization.
+    cache_dir:
+        Directory for normalized per-PDB cache files and ``_raw`` responses.
+    batch_size:
+        Maximum requested entries per GraphQL call.
+    refresh:
+        Ignore reusable cache entries and fetch every requested ID.
+    retry_error_cache:
+        Retry cached ``graphql_error`` entries when ``refresh`` is false.
+    endpoint, timeout_seconds, transport:
+        Passed to :func:`fetch_rcsb_graphql_batch`.
+
+    Returns
+    -------
+    dict[str, dict[str, Any]]
+        Mapping from canonical PDB ID to normalized metadata.
+    """
+
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than 0")
+    canonical_ids = sorted(set(_validate_pdb_ids(list(pdb_ids))))
+    cache_path = Path(cache_dir)
+    cache_path.mkdir(parents=True, exist_ok=True)
+    (cache_path / "_raw").mkdir(parents=True, exist_ok=True)
+
+    metadata: dict[str, dict[str, Any]] = {}
+    pending = []
+    for pdb_id in canonical_ids:
+        cached = None if refresh else _read_reusable_cache(cache_path / f"{pdb_id}.json")
+        if cached is not None and not (
+            retry_error_cache and cached.get("entry_mapping_status") == "graphql_error"
+        ):
+            metadata[pdb_id] = cached
+        else:
+            pending.append(pdb_id)
+
+    for start in range(0, len(pending), batch_size):
+        batch = pending[start : start + batch_size]
+        _fetch_cache_batch(
+            batch,
+            cache_path=cache_path,
+            metadata=metadata,
+            endpoint=endpoint,
+            timeout_seconds=timeout_seconds,
+            transport=transport,
+        )
+    return metadata
+
+
+def build_pdb_metadata_frame(
+    pdb_metadata: Mapping[str, Mapping[str, Any]],
+) -> pl.DataFrame:
+    """Build one-row-per-PDB summary metadata with an explicit schema."""
+
+    rows = []
+    for pdb_id in sorted(pdb_metadata):
+        metadata = pdb_metadata[pdb_id]
+        rows.append(
+            {
+                "pdb_id": pdb_id,
+                "all_uniprot_accessions": metadata.get("all_uniprot_accessions", []),
+                "all_uniprot_isoforms": metadata.get("all_uniprot_isoforms", []),
+                "all_protein_names": metadata.get("all_protein_names", []),
+                "all_organisms": metadata.get("all_organisms", []),
+                "all_organism_taxonomy_ids": metadata.get(
+                    "all_organism_taxonomy_ids", []
+                ),
+                "rcsb_polymer_entity_ids": [
+                    entity["rcsb_polymer_entity_id"]
+                    for entity in metadata.get("protein_entities", [])
+                ],
+                "protein_entity_count": metadata.get("protein_entity_count", 0),
+                "mapped_protein_entity_count": metadata.get(
+                    "mapped_protein_entity_count", 0
+                ),
+                "entry_mapping_status": metadata.get("entry_mapping_status"),
+                "graphql_status": metadata.get("graphql_status"),
+                "retrieved_at": metadata.get("retrieved_at"),
+                "mapping_source": metadata.get("mapping_source", RCSB_MAPPING_SOURCE),
+                "query_sha256": metadata.get("query_sha256", RCSB_QUERY_SHA256),
+                "protein_entities_json": json.dumps(
+                    metadata.get("protein_entities", []),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                "metadata_warnings": metadata.get("metadata_warnings", []),
+            }
+        )
+    return pl.DataFrame(rows, schema=PDB_METADATA_SCHEMA, orient="row")
+
+
+def build_entity_uniprot_frame(
+    pdb_metadata: Mapping[str, Mapping[str, Any]],
+) -> pl.DataFrame:
+    """Build a normalized protein-entity-to-UniProt relation table.
+
+    Each mapped accession receives one row per protein entity.  Protein
+    entities without a UniProt reference are retained with a null accession,
+    which is essential for auditing ``partial_uniprot_mapping`` and
+    ``no_uniprot_mapping`` entries.  Names, organisms, chains, provenance, and
+    coverage remain associated with the entity/accession that supplied them.
+    """
+
+    rows = []
+    for pdb_id in sorted(pdb_metadata):
+        metadata = pdb_metadata[pdb_id]
+        for entity in metadata.get("protein_entities", []):
+            mappings = entity.get("uniprot_mappings") or [None]
+            for mapping in mappings:
+                rows.append(
+                    {
+                        "pdb_id": pdb_id,
+                        "rcsb_polymer_entity_id": entity.get(
+                            "rcsb_polymer_entity_id"
+                        ),
+                        "rcsb_id": entity.get("rcsb_id"),
+                        "polymer_type": entity.get("polymer_type"),
+                        "entity_description": entity.get("entity_description"),
+                        "label_asym_ids": entity.get("label_asym_ids", []),
+                        "auth_asym_ids": entity.get("auth_asym_ids", []),
+                        "organism_names": entity.get("organism_names", []),
+                        "organism_taxonomy_ids": entity.get(
+                            "organism_taxonomy_ids", []
+                        ),
+                        "uniprot_accession": (
+                            mapping.get("uniprot_accession") if mapping else None
+                        ),
+                        "uniprot_isoform": (
+                            mapping.get("uniprot_isoform") if mapping else None
+                        ),
+                        "mapping_provenance": (
+                            mapping.get("provenance_source") if mapping else None
+                        ),
+                        "entity_sequence_coverage": (
+                            mapping.get("entity_sequence_coverage") if mapping else None
+                        ),
+                        "reference_sequence_coverage": (
+                            mapping.get("reference_sequence_coverage")
+                            if mapping
+                            else None
+                        ),
+                        "entry_mapping_status": metadata.get("entry_mapping_status"),
+                        "retrieved_at": metadata.get("retrieved_at"),
+                    }
+                )
+    return pl.DataFrame(rows, schema=ENTITY_METADATA_SCHEMA, orient="row")
+
+
+def build_row_level_metadata(
+    lmdb_rows: Iterable[Mapping[str, Any]],
+    pdb_metadata: Mapping[str, Mapping[str, Any]],
+) -> pl.DataFrame:
+    """Join every LMDB row to entry-level metadata by canonical PDB ID.
+
+    ``selected_uniprot_accession`` is populated only for the two unambiguous
+    statuses.  A partial mapping with one observed accession remains unselected
+    because unmapped entities could introduce additional proteins.  Non-PDB
+    pocket values and missing metadata receive explicit failure statuses rather
+    than disappearing from the sidecar.
+    """
+
+    output_rows = []
+    seen_identities: set[tuple[str, str]] = set()
+    for row in lmdb_rows:
+        source_split = str(row["source_split"])
+        source_key = str(row["source_lmdb_key"])
+        identity = (source_split, source_key)
+        if identity in seen_identities:
+            raise ValueError(f"Duplicate LMDB row identity: {identity}")
+        seen_identities.add(identity)
+
+        raw_pocket_id = str(row.get("raw_pocket_id") or "")
+        pdb_id = canonicalize_pdb_id(row.get("pdb_id") or raw_pocket_id)
+        if pdb_id is None:
+            metadata = _failure_metadata(
+                pdb_id=None,
+                status="non_pdb_pocket_id",
+                warning=f"Pocket identifier is not PDB-like: {raw_pocket_id!r}",
+            )
+        else:
+            metadata = dict(
+                pdb_metadata.get(pdb_id)
+                or _failure_metadata(
+                    pdb_id=pdb_id,
+                    status="pdb_metadata_missing",
+                    warning="No PDB metadata was supplied for this row.",
+                )
+            )
+
+        status = metadata["entry_mapping_status"]
+        accessions = list(metadata.get("all_uniprot_accessions", []))
+        selected_accession = (
+            accessions[0]
+            if status in UNAMBIGUOUS_MAPPING_STATUSES and len(accessions) == 1
+            else None
+        )
+        entities = metadata.get("protein_entities", [])
+        output_rows.append(
+            {
+                "source_split": source_split,
+                "source_lmdb_key": source_key,
+                "raw_pocket_id": raw_pocket_id,
+                "pdb_id": pdb_id,
+                "pocket_geometry_hash": _optional_string(
+                    row.get("pocket_geometry_hash")
+                ),
+                "entry_uniprot_accessions": accessions,
+                "entry_uniprot_isoforms": metadata.get("all_uniprot_isoforms", []),
+                "selected_uniprot_accession": selected_accession,
+                "entry_protein_names": metadata.get("all_protein_names", []),
+                "entry_organisms": metadata.get("all_organisms", []),
+                "entry_organism_taxonomy_ids": metadata.get(
+                    "all_organism_taxonomy_ids", []
+                ),
+                "entry_rcsb_polymer_entity_ids": [
+                    entity["rcsb_polymer_entity_id"] for entity in entities
+                ],
+                "entry_label_asym_ids": [
+                    entity.get("label_asym_ids", []) for entity in entities
+                ],
+                "entry_auth_asym_ids": [
+                    entity.get("auth_asym_ids", []) for entity in entities
+                ],
+                "protein_entity_count": metadata.get("protein_entity_count", 0),
+                "mapped_protein_entity_count": metadata.get(
+                    "mapped_protein_entity_count", 0
+                ),
+                "protein_mapping_method": RCSB_MAPPING_METHOD,
+                "protein_mapping_status": status,
+                "protein_mapping_source": metadata.get(
+                    "mapping_source", RCSB_MAPPING_SOURCE
+                ),
+                "protein_mapping_retrieved_at": metadata.get("retrieved_at"),
+                "protein_mapping_query_sha256": metadata.get(
+                    "query_sha256", RCSB_QUERY_SHA256
+                ),
+                "metadata_warnings": metadata.get("metadata_warnings", []),
+            }
+        )
+    return pl.DataFrame(output_rows, schema=ROW_METADATA_SCHEMA, orient="row")
+
+
+def build_uniprot_metadata_sidecars(
+    lmdb_paths: Mapping[str, str | Path],
+    *,
+    output_dir: str | Path = "data",
+    cache_dir: str | Path | None = None,
+    batch_size: int = DEFAULT_GRAPHQL_BATCH_SIZE,
+    refresh: bool = False,
+    endpoint: str = RCSB_GRAPHQL_ENDPOINT,
+    timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
+    transport: GraphQLTransport | None = None,
+) -> dict[str, Any]:
+    """Build all normalized Parquet sidecars for one or more LMDB splits.
+
+    This is the high-level metadata workflow.  It scans LMDB rows, fetches or
+    reuses entry metadata, writes PDB summaries, writes the normalized
+    entity/accession relation, and writes one row of joinable metadata per
+    source LMDB record.  Source LMDB files are never modified.
+
+    Returns a dictionary containing the three frames, their output paths,
+    cache directory, row count, and unique PDB count.  An injectable transport
+    makes the complete workflow deterministic in tests and offline fixtures.
+    """
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    resolved_cache_dir = Path(cache_dir) if cache_dir is not None else output_path / "pdb_graphql_cache"
+    lmdb_rows = collect_lmdb_rows(lmdb_paths)
+    pdb_ids = collect_unique_pdb_ids(lmdb_rows)
+    metadata = build_pdb_uniprot_cache(
+        pdb_ids,
+        resolved_cache_dir,
+        batch_size=batch_size,
+        refresh=refresh,
+        endpoint=endpoint,
+        timeout_seconds=timeout_seconds,
+        transport=transport,
+    )
+    pdb_frame = build_pdb_metadata_frame(metadata)
+    entity_frame = build_entity_uniprot_frame(metadata)
+    row_frame = build_row_level_metadata(lmdb_rows, metadata)
+
+    pdb_output = output_path / DEFAULT_PDB_METADATA_PATH.name
+    entity_output = output_path / DEFAULT_ENTITY_METADATA_PATH.name
+    row_output = output_path / DEFAULT_POCKET_METADATA_PATH.name
+    pdb_frame.write_parquet(pdb_output)
+    entity_frame.write_parquet(entity_output)
+    row_frame.write_parquet(row_output)
+    return {
+        "pdb_metadata": pdb_frame,
+        "entity_metadata": entity_frame,
+        "row_metadata": row_frame,
+        "pdb_metadata_path": str(pdb_output),
+        "entity_metadata_path": str(entity_output),
+        "row_metadata_path": str(row_output),
+        "cache_dir": str(resolved_cache_dir),
+        "lmdb_rows": len(lmdb_rows),
+        "unique_pdb_ids": len(pdb_ids),
+    }
+
+
+def write_enriched_lmdb(
+    source_lmdb: str | Path,
+    metadata_df: pl.DataFrame,
+    output_lmdb: str | Path,
+    *,
+    source_split: str | None = None,
+    overwrite: bool = False,
+    on_missing: str = "error",
+    map_size: int | None = None,
+    commit_interval: int = 1000,
+) -> dict[str, Any]:
+    """Copy an LMDB and add compact entry-level UniProt metadata fields.
+
+    The source record is copied before enrichment and ``record["pocket"]`` is
+    explicitly checked after updates, guaranteeing that the original
+    PDB-like identifier is unchanged.  Extra fields are ignored by the
+    DrugCLIP pocket loader, so the resulting LMDB remains usable as a candidate
+    pocket library.
+
+    Candidate libraries assembled from multiple splits can be enriched because
+    existing ``source_split`` and ``source_lmdb_key`` fields take precedence
+    over the function's ``source_split`` argument and current LMDB key.  For a
+    raw split LMDB, pass ``source_split`` so rows match the sidecar identity.
+
+    Parameters
+    ----------
+    source_lmdb:
+        Original or candidate-library LMDB to copy.
+    metadata_df:
+        Row-level frame returned by :func:`build_row_level_metadata`.
+    output_lmdb:
+        New enriched LMDB path.  The source path may not be reused.
+    source_split:
+        Split identity for raw LMDBs without embedded provenance.
+    overwrite:
+        Replace an existing output path.
+    on_missing:
+        ``"error"`` raises when metadata is absent; ``"keep"`` copies that
+        record without enrichment and reports it in the summary.
+    map_size:
+        Optional LMDB map size.  Defaults to twice the source map size.
+    commit_interval:
+        Number of records per write transaction.
+
+    Returns
+    -------
+    dict[str, Any]
+        Counts and paths for the completed enriched copy.
+    """
+
+    if on_missing not in {"error", "keep"}:
+        raise ValueError("on_missing must be 'error' or 'keep'")
+    if commit_interval <= 0:
+        raise ValueError("commit_interval must be greater than 0")
+
+    source_path = Path(source_lmdb)
+    output_path = Path(output_lmdb)
+    if source_path.resolve() == output_path.resolve():
+        raise ValueError("output_lmdb must differ from source_lmdb")
+    if not source_path.exists():
+        raise FileNotFoundError(f"Source LMDB not found: {source_path}")
+    if output_path.exists() and not overwrite:
+        raise FileExistsError(f"LMDB already exists: {output_path}")
+
+    metadata_lookup: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in metadata_df.iter_rows(named=True):
+        identity = (str(row["source_split"]), str(row["source_lmdb_key"]))
+        if identity in metadata_lookup:
+            raise ValueError(f"Duplicate metadata identity: {identity}")
+        metadata_lookup[identity] = row
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = output_path.with_name(f".{output_path.name}.tmp")
+    temporary_path.unlink(missing_ok=True)
+
+    source_environment = lmdb.open(
+        str(source_path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    resolved_map_size = map_size or source_environment.info()["map_size"] * 2
+    output_environment = lmdb.open(
+        str(temporary_path),
+        subdir=False,
+        readonly=False,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        map_size=resolved_map_size,
+    )
+    transaction = output_environment.begin(write=True)
+    enriched = 0
+    missing = 0
+    completed = False
+    try:
+        with source_environment.begin() as source_transaction:
+            for index, (key, value) in enumerate(source_transaction.cursor(), start=1):
+                record = pickle.loads(value)
+                if not isinstance(record, dict):
+                    raise TypeError(f"Source LMDB record {key!r} is not a dictionary")
+                key_text = key.decode("ascii", errors="replace")
+                identity = (
+                    str(record.get("source_split") or source_split or ""),
+                    str(record.get("source_lmdb_key") or key_text),
+                )
+                metadata = metadata_lookup.get(identity)
+                if metadata is None:
+                    if on_missing == "error":
+                        raise KeyError(f"No metadata for LMDB row identity {identity}")
+                    missing += 1
+                    output_record = dict(record)
+                else:
+                    original_pocket = record.get("pocket")
+                    output_record = dict(record)
+                    output_record.update(_compact_lmdb_metadata(metadata))
+                    if output_record.get("pocket") != original_pocket:
+                        raise AssertionError("Enrichment changed record['pocket']")
+                    enriched += 1
+
+                transaction.put(
+                    key,
+                    pickle.dumps(output_record, protocol=pickle.HIGHEST_PROTOCOL),
+                )
+                if index % commit_interval == 0:
+                    transaction.commit()
+                    transaction = output_environment.begin(write=True)
+            transaction.commit()
+            transaction = None
+            completed = True
+    except Exception:
+        if transaction is not None:
+            transaction.abort()
+        raise
+    finally:
+        source_environment.close()
+        output_environment.close()
+        if not completed:
+            temporary_path.unlink(missing_ok=True)
+
+    if output_path.exists():
+        output_path.unlink()
+    temporary_path.replace(output_path)
+    return {
+        "source_lmdb": str(source_path),
+        "output_lmdb": str(output_path),
+        "enriched_records": enriched,
+        "missing_metadata_records": missing,
+        "records": enriched + missing,
+    }
+
+
+def aggregate_pocket_scores_by_protein(
+    ranked_pockets: pl.DataFrame,
+    entity_metadata: pl.DataFrame,
+    *,
+    ambiguity_mode: str = "strict",
+    query_column: str | None = "query",
+    pocket_column: str = "pocket",
+    score_column: str = "drugclip_score",
+) -> pl.DataFrame:
+    """Aggregate ranked pocket hits into detailed UniProt protein rankings.
+
+    Scores are aggregated by maximum pocket score.  In ``strict`` mode, only
+    entries classified ``ok_single_uniprot`` or
+    ``ok_multiple_entities_same_uniprot`` contribute.  In ``exploratory``
+    mode, every reported accession receives the pocket score and ambiguous or
+    partial evidence is flagged.
+
+    The result reports the best supporting pocket and available source-row
+    provenance, support count, unique PDB count, all supporting PDB and pocket
+    identifiers, mapping statuses, ambiguity, associated names/organisms, and
+    a JSON representation of every supporting hit.  ``support_count`` counts
+    ranked candidate rows while ``unique_pdb_count`` exposes representation
+    imbalance from repeated structures or augmented pocket geometries.
+
+    Parameters
+    ----------
+    ranked_pockets:
+        Pocket ranking frame.  Required columns are ``pocket_column`` and
+        ``score_column``.  Optional ``source_split``, ``source_lmdb_key``, and
+        ``pocket_geometry_hash`` values are propagated into support details.
+        If ``query_column`` is absent or ``None``, all rows belong to a single
+        synthetic query named ``"__single_query__"``.
+    entity_metadata:
+        Normalized frame from :func:`build_entity_uniprot_frame`.
+    ambiguity_mode:
+        ``"strict"`` or ``"exploratory"``.
+    query_column, pocket_column, score_column:
+        Input column names.
+
+    Returns
+    -------
+    polars.DataFrame
+        Protein rankings ordered by query, descending score, and accession.
+    """
+
+    if ambiguity_mode not in {"strict", "exploratory"}:
+        raise ValueError("ambiguity_mode must be 'strict' or 'exploratory'")
+    missing_columns = {pocket_column, score_column}.difference(ranked_pockets.columns)
+    if missing_columns:
+        raise ValueError(f"Ranked pocket table is missing columns: {sorted(missing_columns)}")
+
+    entity_lookup = _build_entity_ranking_lookup(entity_metadata)
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for hit_index, hit in enumerate(ranked_pockets.iter_rows(named=True)):
+        raw_pocket = str(hit[pocket_column])
+        pdb_id = canonicalize_pdb_id(hit.get("pdb_id") or raw_pocket)
+        if pdb_id is None or pdb_id not in entity_lookup:
+            continue
+        query = (
+            str(hit[query_column])
+            if query_column and query_column in hit and hit[query_column] is not None
+            else "__single_query__"
+        )
+        score = float(hit[score_column])
+        for accession, relation in entity_lookup[pdb_id].items():
+            status = relation["entry_mapping_status"]
+            if ambiguity_mode == "strict" and status not in UNAMBIGUOUS_MAPPING_STATUSES:
+                continue
+            support = {
+                "hit_index": hit_index,
+                "pocket": raw_pocket,
+                "pdb_id": pdb_id,
+                "score": score,
+                "source_split": _optional_string(hit.get("source_split")),
+                "source_lmdb_key": _optional_string(hit.get("source_lmdb_key")),
+                "pocket_geometry_hash": _optional_string(
+                    hit.get("pocket_geometry_hash")
+                ),
+                "mapping_status": status,
+                "rcsb_polymer_entity_ids": relation["rcsb_polymer_entity_ids"],
+            }
+            key = (query, accession)
+            group = grouped.setdefault(
+                key,
+                {
+                    "query": query,
+                    "uniprot_accession": accession,
+                    "protein_names": set(),
+                    "organisms": set(),
+                    "organism_taxonomy_ids": set(),
+                    "supports": [],
+                },
+            )
+            group["protein_names"].update(relation["protein_names"])
+            group["organisms"].update(relation["organisms"])
+            group["organism_taxonomy_ids"].update(
+                relation["organism_taxonomy_ids"]
+            )
+            group["supports"].append(support)
+
+    rows = []
+    for group in grouped.values():
+        supports = group["supports"]
+        best = max(supports, key=lambda support: support["score"])
+        statuses = _ordered_unique(support["mapping_status"] for support in supports)
+        rows.append(
+            {
+                "query": group["query"],
+                "protein_rank": 0,
+                "uniprot_accession": group["uniprot_accession"],
+                "protein_score": best["score"],
+                "protein_names": sorted(group["protein_names"]),
+                "organisms": sorted(group["organisms"]),
+                "organism_taxonomy_ids": sorted(group["organism_taxonomy_ids"]),
+                "best_pocket": best["pocket"],
+                "best_pdb_id": best["pdb_id"],
+                "best_source_split": best["source_split"],
+                "best_source_lmdb_key": best["source_lmdb_key"],
+                "best_pocket_geometry_hash": best["pocket_geometry_hash"],
+                "best_support_mapping_status": best["mapping_status"],
+                "support_count": len(supports),
+                "unique_pdb_count": len({support["pdb_id"] for support in supports}),
+                "supporting_pdb_ids": sorted(
+                    {support["pdb_id"] for support in supports}
+                ),
+                "supporting_pocket_ids": sorted(
+                    {support["pocket"] for support in supports}
+                ),
+                "supporting_mapping_statuses": statuses,
+                "has_ambiguous_support": any(
+                    status not in UNAMBIGUOUS_MAPPING_STATUSES for status in statuses
+                ),
+                "aggregation_method": "max",
+                "ambiguity_mode": ambiguity_mode,
+                "supporting_hits_json": json.dumps(
+                    supports, sort_keys=True, separators=(",", ":")
+                ),
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            row["query"],
+            -row["protein_score"],
+            row["uniprot_accession"],
+        )
+    )
+    current_query = None
+    current_rank = 0
+    for row in rows:
+        if row["query"] != current_query:
+            current_query = row["query"]
+            current_rank = 1
+        else:
+            current_rank += 1
+        row["protein_rank"] = current_rank
+    return pl.DataFrame(rows, schema=PROTEIN_RANKING_SCHEMA, orient="row")
+
+
+def _normalize_protein_entity(
+    pdb_id: str,
+    entity_json: Mapping[str, Any],
+) -> dict[str, Any]:
+    identifiers = entity_json.get("rcsb_polymer_entity_container_identifiers") or {}
+    entity_poly = entity_json.get("entity_poly") or {}
+    entity_summary = entity_json.get("rcsb_polymer_entity") or {}
+    entity_id = _optional_string(identifiers.get("entity_id"))
+    if entity_id is None:
+        rcsb_id = _optional_string(entity_json.get("rcsb_id")) or ""
+        entity_id = rcsb_id.rsplit("_", maxsplit=1)[-1] or rcsb_id
+
+    mappings = []
+    for reference in identifiers.get("reference_sequence_identifiers") or []:
+        if not isinstance(reference, Mapping):
+            continue
+        database_name = str(reference.get("database_name") or "").upper()
+        accession = _optional_string(reference.get("database_accession"))
+        if database_name != "UNIPROT" or accession is None:
+            continue
+        mappings.append(
+            {
+                "uniprot_accession": accession,
+                "uniprot_isoform": _optional_string(reference.get("database_isoform")),
+                "provenance_source": _optional_string(
+                    reference.get("provenance_source")
+                ),
+                "entity_sequence_coverage": _optional_float(
+                    reference.get("entity_sequence_coverage")
+                ),
+                "reference_sequence_coverage": _optional_float(
+                    reference.get("reference_sequence_coverage")
+                ),
+            }
+        )
+    mappings = _deduplicate_mappings(mappings)
+
+    organisms = entity_json.get("rcsb_entity_source_organism") or []
+    return {
+        "pdb_id": pdb_id,
+        "rcsb_polymer_entity_id": entity_id,
+        "rcsb_id": _optional_string(entity_json.get("rcsb_id")),
+        "polymer_type": _optional_string(
+            entity_poly.get("rcsb_entity_polymer_type") or entity_poly.get("type")
+        ),
+        "entity_description": _optional_string(entity_summary.get("pdbx_description")),
+        "label_asym_ids": _string_list(identifiers.get("asym_ids")),
+        "auth_asym_ids": _string_list(identifiers.get("auth_asym_ids")),
+        "organism_names": _ordered_unique(
+            _optional_string(organism.get("ncbi_scientific_name"))
+            for organism in organisms
+            if isinstance(organism, Mapping)
+            and _optional_string(organism.get("ncbi_scientific_name")) is not None
+        ),
+        "organism_taxonomy_ids": _ordered_unique(
+            str(organism["ncbi_taxonomy_id"])
+            for organism in organisms
+            if isinstance(organism, Mapping)
+            and organism.get("ncbi_taxonomy_id") is not None
+        ),
+        "uniprot_mappings": mappings,
+        "uniprot_accessions": _ordered_unique(
+            mapping["uniprot_accession"] for mapping in mappings
+        ),
+    }
+
+
+def _is_protein_entity(entity_json: Mapping[str, Any]) -> bool:
+    entity_poly = entity_json.get("entity_poly") or {}
+    normalized_type = str(entity_poly.get("rcsb_entity_polymer_type") or "").lower()
+    raw_type = str(entity_poly.get("type") or "").lower()
+    return normalized_type == "protein" or raw_type.startswith("polypeptide")
+
+
+def _failure_metadata(
+    *,
+    pdb_id: str | None,
+    status: str,
+    warning: str,
+    retrieved_at: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "pdb_id": pdb_id,
+        "retrieved_at": retrieved_at or utc_now_iso(),
+        "mapping_source": RCSB_MAPPING_SOURCE,
+        "mapping_method": RCSB_MAPPING_METHOD,
+        "query_sha256": RCSB_QUERY_SHA256,
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "entry_mapping_status": status,
+        "graphql_status": "error" if status == "graphql_error" else "ok",
+        "protein_entity_count": 0,
+        "mapped_protein_entity_count": 0,
+        "protein_entities": [],
+        "all_uniprot_accessions": [],
+        "all_uniprot_isoforms": [],
+        "all_protein_names": [],
+        "all_organisms": [],
+        "all_organism_taxonomy_ids": [],
+        "metadata_warnings": [warning],
+        "raw_graphql_entry": None,
+    }
+
+
+def _fetch_cache_batch(
+    pdb_ids: list[str],
+    *,
+    cache_path: Path,
+    metadata: dict[str, dict[str, Any]],
+    endpoint: str,
+    timeout_seconds: float,
+    transport: GraphQLTransport | None,
+) -> None:
+    if not pdb_ids:
+        return
+    retrieved_at = utc_now_iso()
+    try:
+        payload = fetch_rcsb_graphql_batch(
+            pdb_ids,
+            endpoint=endpoint,
+            timeout_seconds=timeout_seconds,
+            transport=transport,
+        )
+    except RCSBGraphQLError as exc:
+        if exc.status_code in {413, 414} and len(pdb_ids) > 1:
+            midpoint = len(pdb_ids) // 2
+            for smaller_batch in (pdb_ids[:midpoint], pdb_ids[midpoint:]):
+                _fetch_cache_batch(
+                    smaller_batch,
+                    cache_path=cache_path,
+                    metadata=metadata,
+                    endpoint=endpoint,
+                    timeout_seconds=timeout_seconds,
+                    transport=transport,
+                )
+            return
+        for pdb_id in pdb_ids:
+            normalized = _failure_metadata(
+                pdb_id=pdb_id,
+                status="graphql_error",
+                warning=str(exc),
+                retrieved_at=retrieved_at,
+            )
+            _write_json(cache_path / f"{pdb_id}.json", normalized)
+            metadata[pdb_id] = normalized
+        return
+
+    _write_raw_batch_cache(
+        cache_path / "_raw",
+        pdb_ids,
+        payload,
+        retrieved_at,
+        endpoint=endpoint,
+    )
+    errors = _graphql_error_messages(payload.get("errors"))
+    returned_entries = {
+        str(entry.get("rcsb_id") or "").upper(): entry
+        for entry in payload["data"]["entries"]
+        if isinstance(entry, Mapping) and entry.get("rcsb_id")
+    }
+    for pdb_id in pdb_ids:
+        entry = returned_entries.get(pdb_id)
+        if entry is None:
+            if errors:
+                normalized = _failure_metadata(
+                    pdb_id=pdb_id,
+                    status="graphql_error",
+                    warning="; ".join(errors),
+                    retrieved_at=retrieved_at,
+                )
+            else:
+                normalized = _failure_metadata(
+                    pdb_id=pdb_id,
+                    status="pdb_not_found",
+                    warning="RCSB returned no entry for the requested PDB ID.",
+                    retrieved_at=retrieved_at,
+                )
+        else:
+            normalized = normalize_rcsb_entry(
+                entry,
+                retrieved_at=retrieved_at,
+                graphql_errors=errors,
+            )
+        _write_json(cache_path / f"{pdb_id}.json", normalized)
+        metadata[pdb_id] = normalized
+
+
+def _post_json_with_retries(
+    endpoint: str,
+    payload: Mapping[str, Any],
+    timeout_seconds: float,
+    *,
+    max_retries: int,
+    initial_backoff_seconds: float,
+) -> Mapping[str, Any]:
+    if max_retries < 0:
+        raise ValueError("max_retries must be non-negative")
+    if initial_backoff_seconds < 0:
+        raise ValueError("initial_backoff_seconds must be non-negative")
+
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint,
+        data=body,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": RCSB_USER_AGENT,
+        },
+        method="POST",
+    )
+    delay = initial_backoff_seconds
+    for attempt in range(max_retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                try:
+                    return json.loads(response.read().decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise RCSBGraphQLError(
+                        "RCSB GraphQL returned an invalid JSON response"
+                    ) from exc
+        except urllib.error.HTTPError as exc:
+            retryable = exc.code == 429 or 500 <= exc.code < 600
+            if not retryable or attempt == max_retries:
+                detail = _http_error_detail(exc)
+                raise RCSBGraphQLError(
+                    f"RCSB GraphQL HTTP {exc.code}: {detail}",
+                    status_code=exc.code,
+                ) from exc
+            retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
+            time.sleep(retry_after if retry_after is not None else delay)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt == max_retries:
+                raise RCSBGraphQLError(
+                    f"RCSB GraphQL network failure: {exc}"
+                ) from exc
+            time.sleep(delay)
+        delay *= 2
+    raise AssertionError("unreachable retry loop")
+
+
+def _http_error_detail(error: urllib.error.HTTPError) -> str:
+    try:
+        body = error.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+    return body[:500] or str(error.reason)
+
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        return max(float(value), 0.0)
+    except ValueError:
+        return None
+
+
+def _read_reusable_cache(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        cached.get("cache_schema_version") != CACHE_SCHEMA_VERSION
+        or cached.get("query_sha256") != RCSB_QUERY_SHA256
+    ):
+        return None
+    return cached
+
+
+def _write_raw_batch_cache(
+    raw_cache_dir: Path,
+    pdb_ids: Sequence[str],
+    response: Mapping[str, Any],
+    retrieved_at: str,
+    *,
+    endpoint: str,
+) -> None:
+    request_digest = sha256(
+        (retrieved_at + "\0" + "\0".join(pdb_ids)).encode("utf-8")
+    ).hexdigest()[:16]
+    filename = f"{retrieved_at.replace(':', '').replace('+', '_')}_{request_digest}.json"
+    _write_json(
+        raw_cache_dir / filename,
+        {
+            "retrieved_at": retrieved_at,
+            "endpoint": endpoint,
+            "query": RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY,
+            "query_sha256": RCSB_QUERY_SHA256,
+            "requested_pdb_ids": list(pdb_ids),
+            "response": dict(response),
+        },
+    )
+
+
+def _write_json(path: Path, value: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    temporary_path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
+
+
+def _compact_lmdb_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "pdb_id": metadata.get("pdb_id"),
+        "entry_uniprot_accessions": list(
+            metadata.get("entry_uniprot_accessions") or []
+        ),
+        "entry_uniprot_isoforms": list(metadata.get("entry_uniprot_isoforms") or []),
+        "selected_uniprot_accession": metadata.get("selected_uniprot_accession"),
+        "entry_protein_names": list(metadata.get("entry_protein_names") or []),
+        "entry_organisms": list(metadata.get("entry_organisms") or []),
+        "entry_organism_taxonomy_ids": list(
+            metadata.get("entry_organism_taxonomy_ids") or []
+        ),
+        "entry_rcsb_polymer_entity_ids": list(
+            metadata.get("entry_rcsb_polymer_entity_ids") or []
+        ),
+        "entry_label_asym_ids": list(metadata.get("entry_label_asym_ids") or []),
+        "entry_auth_asym_ids": list(metadata.get("entry_auth_asym_ids") or []),
+        "protein_entity_count": metadata.get("protein_entity_count"),
+        "mapped_protein_entity_count": metadata.get("mapped_protein_entity_count"),
+        "protein_mapping_method": metadata.get("protein_mapping_method"),
+        "protein_mapping_status": metadata.get("protein_mapping_status"),
+        "protein_mapping_source": metadata.get("protein_mapping_source"),
+        "protein_mapping_retrieved_at": metadata.get(
+            "protein_mapping_retrieved_at"
+        ),
+        "protein_mapping_query_sha256": metadata.get(
+            "protein_mapping_query_sha256"
+        ),
+        "protein_metadata_warnings": list(metadata.get("metadata_warnings") or []),
+    }
+
+
+def _build_entity_ranking_lookup(
+    entity_metadata: pl.DataFrame,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    required = {
+        "pdb_id",
+        "rcsb_polymer_entity_id",
+        "entity_description",
+        "organism_names",
+        "organism_taxonomy_ids",
+        "uniprot_accession",
+        "entry_mapping_status",
+    }
+    missing = required.difference(entity_metadata.columns)
+    if missing:
+        raise ValueError(f"Entity metadata is missing columns: {sorted(missing)}")
+
+    lookup: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in entity_metadata.iter_rows(named=True):
+        accession = _optional_string(row.get("uniprot_accession"))
+        pdb_id = canonicalize_pdb_id(row.get("pdb_id"))
+        if accession is None or pdb_id is None:
+            continue
+        relation = lookup.setdefault(pdb_id, {}).setdefault(
+            accession,
+            {
+                "protein_names": set(),
+                "organisms": set(),
+                "organism_taxonomy_ids": set(),
+                "rcsb_polymer_entity_ids": set(),
+                "entry_mapping_status": row["entry_mapping_status"],
+            },
+        )
+        if row.get("entity_description"):
+            relation["protein_names"].add(str(row["entity_description"]))
+        relation["organisms"].update(row.get("organism_names") or [])
+        relation["organism_taxonomy_ids"].update(
+            row.get("organism_taxonomy_ids") or []
+        )
+        if row.get("rcsb_polymer_entity_id"):
+            relation["rcsb_polymer_entity_ids"].add(
+                str(row["rcsb_polymer_entity_id"])
+            )
+
+    for accessions in lookup.values():
+        for relation in accessions.values():
+            for key in (
+                "protein_names",
+                "organisms",
+                "organism_taxonomy_ids",
+                "rcsb_polymer_entity_ids",
+            ):
+                relation[key] = sorted(relation[key])
+    return lookup
+
+
+def _validate_pdb_ids(pdb_ids: Sequence[str]) -> list[str]:
+    canonical = []
+    for pdb_id in pdb_ids:
+        normalized = canonicalize_pdb_id(pdb_id)
+        if normalized is None:
+            raise ValueError(f"Not a classic PDB ID: {pdb_id!r}")
+        canonical.append(normalized)
+    return _ordered_unique(canonical)
+
+
+def _graphql_error_messages(errors: object) -> list[str]:
+    if not isinstance(errors, list):
+        return []
+    messages = []
+    for error in errors:
+        if isinstance(error, Mapping):
+            message = str(error.get("message") or error)
+            path = error.get("path")
+            if path:
+                message = f"{message} (path={path})"
+        else:
+            message = str(error)
+        messages.append(message)
+    return _ordered_unique(messages)
+
+
+def _deduplicate_mappings(mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduplicated = []
+    seen = set()
+    for mapping in mappings:
+        identity = tuple(sorted(mapping.items()))
+        if identity not in seen:
+            seen.add(identity)
+            deduplicated.append(mapping)
+    return deduplicated
+
+
+def _ordered_unique(values: Iterable[Any]) -> list[Any]:
+    output = []
+    seen = set()
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            output.append(value)
+    return output
+
+
+def _string_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(item) for item in value]
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _sort_lmdb_keys(keys: list[bytes]) -> list[bytes]:
+    try:
+        return sorted(keys, key=lambda key: int(key.decode("ascii")))
+    except (UnicodeDecodeError, ValueError):
+        return sorted(keys)
+
+
+__all__ = [
+    "CACHE_SCHEMA_VERSION",
+    "DEFAULT_CACHE_DIR",
+    "DEFAULT_ENTITY_METADATA_PATH",
+    "DEFAULT_GRAPHQL_BATCH_SIZE",
+    "DEFAULT_PDB_METADATA_PATH",
+    "DEFAULT_POCKET_METADATA_PATH",
+    "ENTITY_METADATA_SCHEMA",
+    "PDB_ID_RE",
+    "PDB_METADATA_SCHEMA",
+    "PROTEIN_RANKING_SCHEMA",
+    "RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY",
+    "RCSB_GRAPHQL_ENDPOINT",
+    "RCSBGraphQLError",
+    "ROW_METADATA_SCHEMA",
+    "UNAMBIGUOUS_MAPPING_STATUSES",
+    "aggregate_pocket_scores_by_protein",
+    "build_entity_uniprot_frame",
+    "build_pdb_metadata_frame",
+    "build_pdb_uniprot_cache",
+    "build_row_level_metadata",
+    "build_uniprot_metadata_sidecars",
+    "canonicalize_pdb_id",
+    "collect_lmdb_rows",
+    "collect_unique_pdb_ids",
+    "determine_entry_mapping_status",
+    "fetch_rcsb_graphql_batch",
+    "is_pdb_id",
+    "iter_lmdb_records",
+    "normalize_rcsb_entry",
+    "utc_now_iso",
+    "write_enriched_lmdb",
+]
