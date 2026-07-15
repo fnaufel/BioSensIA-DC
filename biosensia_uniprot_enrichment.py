@@ -17,8 +17,10 @@ entry-level metadata in every LMDB record.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -450,6 +452,7 @@ def fetch_rcsb_graphql_batch(
     transport: GraphQLTransport | None = None,
     max_retries: int = 4,
     initial_backoff_seconds: float = 1.0,
+    ca_bundle: str | Path | None = None,
 ) -> dict[str, Any]:
     """Fetch entry-level protein mappings for one batch of PDB IDs.
 
@@ -476,6 +479,10 @@ def fetch_rcsb_graphql_batch(
         Maximum retry count used by the default HTTP transport.
     initial_backoff_seconds:
         Initial exponential-backoff delay.
+    ca_bundle:
+        Optional PEM certificate-authority bundle added to Python's default
+        trust store.  If omitted, ``CA_BUNDLE``, ``REQUESTS_CA_BUNDLE``, and
+        ``SSL_CERT_FILE`` are consulted, in that order.
 
     Returns
     -------
@@ -500,6 +507,7 @@ def fetch_rcsb_graphql_batch(
             timeout_seconds,
             max_retries=max_retries,
             initial_backoff_seconds=initial_backoff_seconds,
+            ca_bundle=ca_bundle,
         )
     else:
         response = transport(endpoint, payload, timeout_seconds)
@@ -674,6 +682,7 @@ def build_pdb_uniprot_cache(
     timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
     transport: GraphQLTransport | None = None,
     show_progress: bool = True,
+    ca_bundle: str | Path | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build or reuse normalized per-PDB metadata cache files.
 
@@ -705,6 +714,8 @@ def build_pdb_uniprot_cache(
         Passed to :func:`fetch_rcsb_graphql_batch`.
     show_progress:
         Display progress while fetching batches not satisfied by the cache.
+    ca_bundle:
+        Optional PEM CA bundle passed to the default HTTPS transport.
 
     Returns
     -------
@@ -747,6 +758,7 @@ def build_pdb_uniprot_cache(
             endpoint=endpoint,
             timeout_seconds=timeout_seconds,
             transport=transport,
+            ca_bundle=ca_bundle,
         )
     return metadata
 
@@ -868,6 +880,7 @@ def build_uniprot_metadata_sidecars(
     timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
     transport: GraphQLTransport | None = None,
     show_progress: bool = True,
+    ca_bundle: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build three Parquet sidecars without modifying the candidate LMDB.
 
@@ -900,6 +913,10 @@ def build_uniprot_metadata_sidecars(
     show_progress:
         Print a startup message and display progress bars for LMDB indexing
         and uncached GraphQL batches.
+    ca_bundle:
+        Optional PEM CA bundle added to the default TLS trust store.  This is
+        useful on clusters whose management node uses an institutional HTTPS
+        proxy or lacks a current system CA bundle.
 
     Returns
     -------
@@ -939,6 +956,7 @@ def build_uniprot_metadata_sidecars(
         timeout_seconds=timeout_seconds,
         transport=transport,
         show_progress=show_progress,
+        ca_bundle=ca_bundle,
     )
     pdb_frame = build_pdb_metadata_frame(metadata)
     entity_frame = build_entity_uniprot_frame(metadata)
@@ -1278,6 +1296,7 @@ def _fetch_cache_batch(
     endpoint: str,
     timeout_seconds: float,
     transport: GraphQLTransport | None,
+    ca_bundle: str | Path | None,
 ) -> None:
     if not pdb_ids:
         return
@@ -1288,6 +1307,7 @@ def _fetch_cache_batch(
             endpoint=endpoint,
             timeout_seconds=timeout_seconds,
             transport=transport,
+            ca_bundle=ca_bundle,
         )
     except RCSBGraphQLError as exc:
         if exc.status_code in {413, 414} and len(pdb_ids) > 1:
@@ -1300,6 +1320,7 @@ def _fetch_cache_batch(
                     endpoint=endpoint,
                     timeout_seconds=timeout_seconds,
                     transport=transport,
+                    ca_bundle=ca_bundle,
                 )
             return
         for pdb_id in pdb_ids:
@@ -1360,6 +1381,7 @@ def _post_json_with_retries(
     *,
     max_retries: int,
     initial_backoff_seconds: float,
+    ca_bundle: str | Path | None,
 ) -> Mapping[str, Any]:
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
@@ -1377,10 +1399,15 @@ def _post_json_with_retries(
         },
         method="POST",
     )
+    ssl_context = _create_ssl_context(ca_bundle)
     delay = initial_backoff_seconds
     for attempt in range(max_retries + 1):
         try:
-            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            with urllib.request.urlopen(
+                request,
+                timeout=timeout_seconds,
+                context=ssl_context,
+            ) as response:
                 try:
                     return json.loads(response.read().decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -1397,7 +1424,17 @@ def _post_json_with_retries(
                 ) from exc
             retry_after = _retry_after_seconds(exc.headers.get("Retry-After"))
             time.sleep(retry_after if retry_after is not None else delay)
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except ssl.SSLCertVerificationError as exc:
+            raise _tls_verification_error(exc) from exc
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, ssl.SSLCertVerificationError):
+                raise _tls_verification_error(exc.reason) from exc
+            if attempt == max_retries:
+                raise RCSBGraphQLError(
+                    f"RCSB GraphQL network failure: {exc}"
+                ) from exc
+            time.sleep(delay)
+        except TimeoutError as exc:
             if attempt == max_retries:
                 raise RCSBGraphQLError(
                     f"RCSB GraphQL network failure: {exc}"
@@ -1405,6 +1442,51 @@ def _post_json_with_retries(
             time.sleep(delay)
         delay *= 2
     raise AssertionError("unreachable retry loop")
+
+
+def _create_ssl_context(ca_bundle: str | Path | None) -> ssl.SSLContext:
+    """Create a verified TLS context with an optional additional CA bundle.
+
+    Python's platform trust store remains enabled.  An explicit bundle, or the
+    first configured bundle environment variable, is loaded in addition to
+    those roots.  Missing or non-file paths fail before any network requests,
+    preventing a large cache of misleading per-PDB GraphQL errors.
+    """
+
+    configured_bundle = _optional_string(ca_bundle)
+    if configured_bundle is None:
+        configured_bundle = next(
+            (
+                value
+                for variable in (
+                    "CA_BUNDLE",
+                    "REQUESTS_CA_BUNDLE",
+                    "SSL_CERT_FILE",
+                )
+                if (value := _optional_string(os.environ.get(variable))) is not None
+            ),
+            None,
+        )
+
+    context = ssl.create_default_context()
+    if configured_bundle is None:
+        return context
+
+    bundle_path = Path(configured_bundle).expanduser()
+    if not bundle_path.is_file():
+        raise FileNotFoundError(f"TLS CA bundle not found: {bundle_path}")
+    context.load_verify_locations(cafile=str(bundle_path))
+    return context
+
+
+def _tls_verification_error(
+    error: ssl.SSLCertVerificationError,
+) -> RCSBGraphQLError:
+    return RCSBGraphQLError(
+        "RCSB GraphQL TLS certificate verification failed. Set CA_BUNDLE to "
+        "a readable PEM CA bundle supplied by the cluster administrator, or "
+        f"to Certifi's CA bundle. Original error: {error}"
+    )
 
 
 def _http_error_detail(error: urllib.error.HTTPError) -> str:

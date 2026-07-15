@@ -89,7 +89,7 @@ A chave lógica global é:
 (candidate_library_sha256, candidate_lmdb_key)
 ```
 
-`candidate_lmdb_key` é única apenas dentro de uma biblioteca. O digest impede
+`candidate_lmdb_key` é única apenas dentro de uma biblioteca. O *digest* impede
 confundir a chave `"42"` de bibliotecas diferentes.
 
 ### Entrada PDB
@@ -126,20 +126,19 @@ de mapeamento.
 | `pdb_id` | `String` | sim | Código PDB clássico em maiúsculas; nulo para identificadores não PDB. |
 | `pocket_geometry_hash` | `String` | sim | Hash da geometria, quando disponível. |
 
-### Digest lógico
+### *Digest* lógico
 
-O digest não usa as páginas físicas do arquivo. Ele percorre as chaves em ordem
-e incorpora:
+O *digest* não usa as páginas físicas do arquivo. Ele percorre as chaves em ordem e incorpora:
 
 1. comprimento da chave;
 2. bytes da chave;
 3. comprimento do valor;
 4. bytes do valor.
 
-LMDBs logicamente equivalentes têm o mesmo digest mesmo com `map_size` ou
-layout de páginas diferentes. Alterar uma chave ou valor altera o digest.
+LMDBs logicamente equivalentes têm o mesmo *digest* mesmo com `map_size` ou
+layout de páginas diferentes. Alterar uma chave ou valor altera o *digest*.
 
-O digest e a contagem aparecem em todas as linhas. A codificação por dicionário
+O *digest* e a contagem aparecem em todas as linhas. A codificação por dicionário
 do Parquet torna a repetição barata e permite que uma linha isolada ainda
 identifique sua biblioteca.
 
@@ -292,6 +291,7 @@ resultado = build_uniprot_metadata_sidecars(
     batch_size=100,
     refresh=False,
     show_progress=True,
+    ca_bundle="/caminho/opcional/para/ca-bundle.pem",
 )
 ```
 
@@ -331,6 +331,20 @@ BATCH_SIZE=50 REFRESH=true \
 ```bash
 ./build_uniprot_sidecars.sh --help
 ```
+
+O script usa `uv run --no-sync` para não remover a instalação sobreposta do
+Uni-Core. Ele tenta adicionar automaticamente o bundle do Certifi ao trust
+store do Python. Em um nó com proxy HTTPS institucional, forneça o bundle PEM
+indicado pela administração do cluster:
+
+```bash
+CA_BUNDLE=/caminho/para/ca-do-sagres.pem \
+  ./build_uniprot_sidecars.sh data/candidate_pockets.lmdb data/uniprot
+```
+
+Não se deve desabilitar a verificação TLS. Arquivos de cache com estado
+`graphql_error` são tentados novamente automaticamente na próxima execução;
+não é necessário usar `REFRESH=true` apenas para recuperar essa falha.
 
 ## Junções com Polars
 

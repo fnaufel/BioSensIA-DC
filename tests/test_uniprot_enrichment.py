@@ -1,4 +1,5 @@
 import json
+import ssl
 import subprocess
 import urllib.error
 from hashlib import sha256
@@ -277,6 +278,7 @@ def test_fetch_rcsb_graphql_batch_rejects_errors_without_usable_data():
 
 def test_default_graphql_transport_retries_network_errors(monkeypatch):
     attempts = []
+    contexts = []
 
     class FakeResponse:
         def __enter__(self):
@@ -288,8 +290,9 @@ def test_default_graphql_transport_retries_network_errors(monkeypatch):
         def read(self):
             return json.dumps({"data": {"entries": []}}).encode("utf-8")
 
-    def fake_urlopen(_request, timeout):
+    def fake_urlopen(_request, timeout, context):
         attempts.append(timeout)
+        contexts.append(context)
         if len(attempts) == 1:
             raise urllib.error.URLError("temporary failure")
         return FakeResponse()
@@ -306,7 +309,55 @@ def test_default_graphql_transport_retries_network_errors(monkeypatch):
 
     assert response == {"data": {"entries": []}}
     assert attempts == [60.0, 60.0]
+    assert contexts[0] is contexts[1]
     assert sleeps == [0.25]
+
+
+def test_ssl_context_adds_explicit_ca_bundle(tmp_path, monkeypatch):
+    ca_bundle = tmp_path / "sagres-ca.pem"
+    ca_bundle.write_text("test CA bundle", encoding="utf-8")
+    loaded_bundles = []
+
+    class FakeSSLContext:
+        def load_verify_locations(self, *, cafile):
+            loaded_bundles.append(cafile)
+
+    context = FakeSSLContext()
+    monkeypatch.setattr(enrichment.ssl, "create_default_context", lambda: context)
+
+    assert enrichment._create_ssl_context(ca_bundle) is context
+    assert loaded_bundles == [str(ca_bundle)]
+
+
+def test_ssl_context_rejects_missing_ca_bundle(tmp_path):
+    missing_bundle = tmp_path / "missing.pem"
+
+    with pytest.raises(FileNotFoundError, match="TLS CA bundle not found"):
+        enrichment._create_ssl_context(missing_bundle)
+
+
+def test_certificate_verification_failure_is_not_retried(monkeypatch):
+    attempts = []
+    sleeps = []
+    verification_error = ssl.SSLCertVerificationError(
+        1,
+        "unable to get local issuer certificate",
+    )
+
+    def fake_urlopen(_request, timeout, context):
+        attempts.append((timeout, context))
+        raise urllib.error.URLError(verification_error)
+
+    ssl_context = object()
+    monkeypatch.setattr(enrichment, "_create_ssl_context", lambda _bundle: ssl_context)
+    monkeypatch.setattr(enrichment.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(enrichment.time, "sleep", sleeps.append)
+
+    with pytest.raises(RCSBGraphQLError, match="Set CA_BUNDLE"):
+        fetch_rcsb_graphql_batch(["1abc"], max_retries=4)
+
+    assert attempts == [(60.0, ssl_context)]
+    assert sleeps == []
 
 
 def test_build_pdb_uniprot_cache_reconciles_missing_ids_and_reuses_cache(tmp_path):
@@ -792,6 +843,8 @@ def test_sidecar_build_script_has_valid_bash_syntax():
     script = Path("build_uniprot_sidecars.sh").read_text(encoding="utf-8")
     assert "build_uniprot_metadata_sidecars" in script
     assert "show_progress=True" in script
+    assert "uv run --no-sync python" in script
+    assert "CA_BUNDLE" in script
     assert script.index("Starting UniProt sidecar build") < script.index(
-        "uv run python"
+        "uv run --no-sync python"
     )
