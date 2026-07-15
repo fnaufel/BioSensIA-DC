@@ -12,34 +12,36 @@ wheels/
 # Virtual environments
 .venv
 
-# Data (too large for github)
-external/DrugCLIP/data
-external/DrugCLIP/*.pt
-external/DrugCLIP/*.lmdb
-
-# Save data
-external/Uni-Core/examples/bert/save
-.positai
-external/DrugCLIP/savedir
+# Libraries
+external/Uni-Core/*.so
 
 # R project
 .Rproj.user/
 *.Rproj
+.positai
+
+# Save data
+external/Uni-Core/examples/bert/save
+external/DrugCLIP/savedir
+
+# Data
+external/DrugCLIP/data
+external/DrugCLIP/*.pt
+external/DrugCLIP/*.lmdb
+scratch/training_data_pairs.parquet
 data/candidate_pockets.lmdb
 data/mols_index.lmdb
 data/molecules/
-
-# Libraries
-external/Uni-Core/*.so
-scratch/training_data_pairs.parquet
-runs/
 data/biosensia_finetune/*.txt
 data/biosensia_finetune/*.lmdb
+/data/pdb_graphql_cache/
+/data/*.parquet
 external/DrugCLIP/tsb_dir/
+runs/
 /scratch/train.parquet
 /scratch/valid.parquet
 /benchmar_audit_files/
-/2026-07-14-uniprot_enrichment.html
-/2026-07-14-uniprot_enrichment_files/
-/data/pdb_graphql_cache/
-/data/*.parquet
+
+# Quarto
+**/*_files/
+**/*_ipynb*

@@ -1,0 +1,142 @@
+# Examining the sidecars
+
+
+```{python}
+#| label: setup
+
+import polars as pl
+import itables
+itables.init_notebook_mode(all_interactive=True)
+```
+
+
+## Candidate pocket index
+
+### Glimpse
+
+```{python}
+df_candidates = pl.read_parquet(
+    "data/candidate_pocket_index.parquet"
+)
+
+df_candidates.glimpse()
+```
+
+
+### SHA256
+
+```{python}
+df_candidates.select(
+    pl.col('candidate_library_sha256').n_unique()
+)
+```
+
+### Entries
+
+```{python}
+df_candidates.select(
+    pl.col('candidate_library_entries').n_unique()
+)
+```
+
+### Source split
+
+```{python}
+df_candidates.select(
+    pl.col('source_split').value_counts().struct.unnest(),
+)
+```
+
+
+### Source LMDB keys
+
+```{python}
+df_candidates.select(
+    pl.col('source_lmdb_key').null_count().alias('null'),
+    pl.col('source_lmdb_key').n_unique(),
+)
+```
+
+There are duplicate keys, but only because one is in the train split and the other in the validation split.
+
+```{python}
+df_candidates.select(
+    (pl.col('source_lmdb_key') == pl.col('candidate_lmdb_key')).
+    value_counts().
+    alias('same_keys')
+).unnest()
+```
+
+Except for the validation set, the source key and the candidate key are the same.
+
+
+### PDB IDs (normalized to uppercase)
+
+```{python}
+df_candidates.select(
+    pl.col('pdb_id').len().alias('total'),
+    pl.col('pdb_id').n_unique().alias('unique'),
+    pl.col('pdb_id').null_count().alias('null'),
+)
+```
+
+We already knew there were duplicated PDB ids.
+
+
+### Pocket geometry hash
+
+```{python}
+df_candidates.group_by('source_split').agg(
+    pl.col('pocket_geometry_hash').null_count().alias('null'),
+    pl.col('pocket_geometry_hash').n_unique().alias('unique'),
+)
+```
+
+There are duplicated hashes in the train split!
+
+```{python}
+df_dup = df_candidates.filter(pl.col("source_split") == "train").select(
+    pl.col("pdb_id"), pl.col("pocket_geometry_hash")
+).group_by("pdb_id", "pocket_geometry_hash").len(name="n").sort(
+    "n", descending=True
+).filter(pl.col("n") > 1)
+
+df_dup
+```
+
+```{python}
+df_candidates.filter(
+    pl.col('source_split') == 'train',
+    pl.col('pdb_id').is_in(df_dup['pdb_id'].implode()),
+).select(pl.all().exclude('^candidate_lib.*$').exclude('source_split')).group_by(
+    'pdb_id', 'pocket_geometry_hash'
+).agg(pl.col('source_lmdb_key'))
+```
+
+Not only are PDB ids duplicated, but the pocket geometries are too. What is different about these duplicates? Only the LMDB keys. Maybe different ligands. Will check after joining.
+
+## Continue from here
+
+```{python}
+#| eval: false
+df_pdb = pl.read_parquet(
+    "data/uniprot/pdb_uniprot_metadata.parquet"
+)
+
+df_candidates_with_pdb = df_candidates.join(
+    df_pdb,
+    on="pdb_id",
+    how="left",
+    validate="m:1",
+)
+
+df_entities = pl.read_parquet(
+    "data/uniprot/pdb_entity_uniprot_metadata.parquet"
+)
+
+df_candidate_entity_uniprot = df_candidates.join(
+    df_entities,
+    on="pdb_id",
+    how="left",
+)
+```
