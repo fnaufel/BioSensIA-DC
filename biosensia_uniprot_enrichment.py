@@ -30,6 +30,7 @@ from typing import Any
 
 import lmdb
 import polars as pl
+from tqdm.auto import tqdm
 
 
 RCSB_GRAPHQL_ENDPOINT = "https://data.rcsb.org/graphql"
@@ -319,6 +320,8 @@ def collect_unique_pdb_ids(rows: Iterable[Mapping[str, Any]]) -> set[str]:
 
 def build_candidate_pocket_index_frame(
     candidate_lmdb_path: str | Path,
+    *,
+    show_progress: bool = True,
 ) -> pl.DataFrame:
     """Build an exact, lightweight index for one candidate-pocket LMDB.
 
@@ -342,6 +345,8 @@ def build_candidate_pocket_index_frame(
         DrugCLIP-compatible candidate-pocket LMDB.  Records must be pickled
         dictionaries containing a non-empty ``pocket`` field.  Keys must be
         ASCII text so they can be represented losslessly in Parquet.
+    show_progress:
+        Display a progress bar while reading and hashing candidate records.
 
     Returns
     -------
@@ -370,7 +375,12 @@ def build_candidate_pocket_index_frame(
             keys = _sort_lmdb_keys(
                 list(transaction.cursor().iternext(values=False))
             )
-            for key in keys:
+            for key in tqdm(
+                keys,
+                desc="Indexing candidate pockets",
+                unit="record",
+                disable=not show_progress,
+            ):
                 value = transaction.get(key)
                 if value is None:
                     continue
@@ -663,6 +673,7 @@ def build_pdb_uniprot_cache(
     endpoint: str = RCSB_GRAPHQL_ENDPOINT,
     timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
     transport: GraphQLTransport | None = None,
+    show_progress: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Build or reuse normalized per-PDB metadata cache files.
 
@@ -692,6 +703,8 @@ def build_pdb_uniprot_cache(
         Retry cached ``graphql_error`` entries when ``refresh`` is false.
     endpoint, timeout_seconds, transport:
         Passed to :func:`fetch_rcsb_graphql_batch`.
+    show_progress:
+        Display progress while fetching batches not satisfied by the cache.
 
     Returns
     -------
@@ -717,8 +730,16 @@ def build_pdb_uniprot_cache(
         else:
             pending.append(pdb_id)
 
-    for start in range(0, len(pending), batch_size):
-        batch = pending[start : start + batch_size]
+    batches = [
+        pending[start : start + batch_size]
+        for start in range(0, len(pending), batch_size)
+    ]
+    for batch in tqdm(
+        batches,
+        desc="Fetching PDB metadata",
+        unit="batch",
+        disable=not show_progress,
+    ):
         _fetch_cache_batch(
             batch,
             cache_path=cache_path,
@@ -846,6 +867,7 @@ def build_uniprot_metadata_sidecars(
     endpoint: str = RCSB_GRAPHQL_ENDPOINT,
     timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
     transport: GraphQLTransport | None = None,
+    show_progress: bool = True,
 ) -> dict[str, Any]:
     """Build three Parquet sidecars without modifying the candidate LMDB.
 
@@ -875,6 +897,9 @@ def build_uniprot_metadata_sidecars(
     endpoint, timeout_seconds, transport:
         Network configuration passed to build_pdb_uniprot_cache.
         ``transport`` is injectable for deterministic offline tests.
+    show_progress:
+        Print a startup message and display progress bars for LMDB indexing
+        and uncached GraphQL batches.
 
     Returns
     -------
@@ -883,6 +908,12 @@ def build_uniprot_metadata_sidecars(
         candidate library digest, and unique PDB count.
     """
 
+    if show_progress:
+        print(
+            f"Building UniProt metadata sidecars from {candidate_lmdb_path}...",
+            flush=True,
+        )
+
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     resolved_cache_dir = (
@@ -890,7 +921,10 @@ def build_uniprot_metadata_sidecars(
         if cache_dir is not None
         else output_path / "pdb_graphql_cache"
     )
-    candidate_index = build_candidate_pocket_index_frame(candidate_lmdb_path)
+    candidate_index = build_candidate_pocket_index_frame(
+        candidate_lmdb_path,
+        show_progress=show_progress,
+    )
     pdb_ids = {
         pdb_id
         for pdb_id in candidate_index["pdb_id"].to_list()
@@ -904,6 +938,7 @@ def build_uniprot_metadata_sidecars(
         endpoint=endpoint,
         timeout_seconds=timeout_seconds,
         transport=transport,
+        show_progress=show_progress,
     )
     pdb_frame = build_pdb_metadata_frame(metadata)
     entity_frame = build_entity_uniprot_frame(metadata)

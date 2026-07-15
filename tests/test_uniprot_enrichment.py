@@ -679,7 +679,11 @@ def test_aggregate_rejects_ranked_rows_that_do_not_match_candidate_index(tmp_pat
         )
 
 
-def test_end_to_end_sidecars_leave_candidate_lmdb_unchanged(tmp_path):
+def test_end_to_end_sidecars_leave_candidate_lmdb_unchanged(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     candidate_path = tmp_path / "candidate.lmdb"
     write_test_lmdb(
         candidate_path,
@@ -700,6 +704,13 @@ def test_end_to_end_sidecars_leave_candidate_lmdb_unchanged(tmp_path):
         ],
     )
     before = sha256(candidate_path.read_bytes()).hexdigest()
+    progress_calls = []
+
+    def tracked_progress(iterable, **kwargs):
+        progress_calls.append(kwargs)
+        return iterable
+
+    monkeypatch.setattr(enrichment, "tqdm", tracked_progress)
 
     def transport(_endpoint, payload, _timeout):
         requested = payload["variables"]["ids"]
@@ -720,6 +731,14 @@ def test_end_to_end_sidecars_leave_candidate_lmdb_unchanged(tmp_path):
         output_dir=tmp_path / "metadata",
         transport=transport,
     )
+
+    output = capsys.readouterr().out
+    assert output.startswith("Building UniProt metadata sidecars from ")
+    assert [call["desc"] for call in progress_calls] == [
+        "Indexing candidate pockets",
+        "Fetching PDB metadata",
+    ]
+    assert all(call["disable"] is False for call in progress_calls)
 
     after = sha256(candidate_path.read_bytes()).hexdigest()
     assert before == after
@@ -772,3 +791,7 @@ def test_sidecar_build_script_has_valid_bash_syntax():
     assert completed.returncode == 0, completed.stderr
     script = Path("build_uniprot_sidecars.sh").read_text(encoding="utf-8")
     assert "build_uniprot_metadata_sidecars" in script
+    assert "show_progress=True" in script
+    assert script.index("Starting UniProt sidecar build") < script.index(
+        "uv run python"
+    )

@@ -25,6 +25,8 @@ cache_dir="${3:-${output_dir}/pdb_graphql_cache}"
 batch_size="${BATCH_SIZE:-100}"
 refresh="${REFRESH:-false}"
 
+printf 'Starting UniProt sidecar build for %s...\n' "${candidate_lmdb}"
+
 uv run python - \
     "${candidate_lmdb}" \
     "${output_dir}" \
@@ -49,6 +51,7 @@ result = build_uniprot_metadata_sidecars(
     cache_dir=cache_dir,
     batch_size=batch_size,
     refresh=refresh,
+    show_progress=True,
 )
 
 print(f"Candidatos indexados: {result['candidate_rows']}")

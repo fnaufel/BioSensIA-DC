@@ -1,5 +1,5 @@
 ---
-title: "Metadados UniProt para a biblioteca de bolsões do BioSensIA-DC"
+title: "Metadados UniProt para a biblioteca de *pockets* do BioSensIA-DC"
 subtitle: "Especificação, modelo de dados, decisões e guia de uso"
 date: 2026-07-14
 lang: pt-BR
@@ -14,25 +14,24 @@ execute:
 
 ## Resumo executivo
 
-O BioSensIA-DC usa uma biblioteca LMDB de bolsões candidatos para *target
+O BioSensIA-DC usa uma biblioteca LMDB de *pockets* candidatos para *target
 fishing*. O identificador original continua em `record["pocket"]`, sem ser
 substituído por um código UniProt.
 
 O enriquecimento implementado aqui **não procura a proteína que contém
-biologicamente o bolsão**. A partir de um identificador PDB, ele recupera as
+biologicamente o *pocket***. A partir de um identificador PDB, ele recupera as
 entidades poliméricas proteicas presentes na entrada PDB e seus mapeamentos
 UniProt declarados pelo RCSB. Não se afirma que toda proteína retornada contém,
-toca ou é biologicamente responsável pelo bolsão.
+toca ou é biologicamente responsável pelo *pocket*.
 
-A implementação não grava metadados UniProt no LMDB. Ela produz:
+A implementação não grava metadados UniProt nos arquivos LMDB. Ela produz:
 
 1. `candidate_pocket_index.parquet`: índice leve e exato dos candidatos;
 2. `pdb_uniprot_metadata.parquet`: uma linha por entrada PDB;
 3. `pdb_entity_uniprot_metadata.parquet`: relação normalizada entre entrada,
    entidade proteica e mapeamento UniProt.
 
-Essa organização evita duplicação, mantém o LMDB compatível com o DrugCLIP e
-permite atualizar as anotações sem reconstruir átomos e coordenadas.
+Essa organização evita duplicação, mantém os arquivos LMDB compatível com o DrugCLIP e permite atualizar as anotações sem reconstruir átomos e coordenadas.
 
 ## Especificação incorporada
 
@@ -43,16 +42,14 @@ permite atualizar as anotações sem reconstruir átomos e coordenadas.
 - Preservar entidade, cadeias, organismo, isoforma, proveniência e coberturas.
 - Distinguir mapeamento completo, parcial, ausente e ambíguo.
 - Preencher `selected_uniprot_accession` somente em casos inequívocos.
-- Manter respostas normalizadas e brutas em cache.
+- Manter respostas normalizadas e brutas em *cache*.
 - Ligar cada registro LMDB aos sidecars por uma chave exata.
 - Permitir que rankings preservem a identidade exata do candidato.
 - Abrir o LMDB somente para leitura durante a construção dos sidecars.
 
 ## Princípio de projeto
 
-O LMDB é a biblioteca de inferência. Ele contém `pocket`, `pocket_atoms`,
-`pocket_coordinates` e os campos de proveniência já produzidos na montagem da
-biblioteca, como `source_split`, `source_lmdb_key` e
+O arquivo LMDB é a biblioteca de inferência. Ele contém `pocket`, `pocket_atoms`, `pocket_coordinates` e os campos de proveniência já produzidos na montagem da biblioteca, como `source_split`, `source_lmdb_key` e
 `pocket_geometry_hash`.
 
 Os metadados de proteína são relacionais e ficam em Parquet. Eles podem mudar
@@ -261,7 +258,7 @@ Somente referências UniProt entram no mapeamento. Entidades não proteicas são
 ignoradas. Respostas com dados e erros são aceitas como parciais; os erros são
 preservados em `metadata_warnings`.
 
-## Cache e reprodutibilidade
+## *Cache* e reprodutibilidade
 
 Por padrão:
 
@@ -276,7 +273,7 @@ Por padrão:
 Os arquivos por PDB guardam a forma normalizada. `_raw` guarda resposta bruta,
 consulta, endpoint, IDs solicitados e horário.
 
-Um cache só é reutilizado se `cache_schema_version` e `query_sha256` forem
+Um *cache* só é reutilizado se `cache_schema_version` e `query_sha256` forem
 compatíveis. Entradas `graphql_error` são auditáveis, mas tentadas novamente
 por padrão. HTTP 413/414 causa divisão recursiva do lote. Erros de rede, HTTP
 429 e 5xx usam tentativas com *backoff* exponencial.
@@ -294,6 +291,7 @@ resultado = build_uniprot_metadata_sidecars(
     cache_dir="data/uniprot/pdb_graphql_cache",
     batch_size=100,
     refresh=False,
+    show_progress=True,
 )
 ```
 
@@ -310,6 +308,9 @@ data/uniprot/
 O retorno contém os três DataFrames, seus caminhos,
 `candidate_rows`, `candidate_library_sha256`, `unique_pdb_ids`,
 `cache_dir` e `candidate_lmdb_path`. O LMDB é aberto em modo somente leitura.
+Antes de processar os dados, a função imprime a biblioteca de origem. Com
+`show_progress=True`, mostra barras para a indexação dos candidatos e para os
+lotes GraphQL que não foram atendidos pelo cache.
 
 ### Script Bash
 
@@ -386,7 +387,7 @@ Não transporte `candidate_lmdb_key` sem
 
 ## Agregação por proteína
 
-`aggregate_pocket_scores_by_protein` usa o maior escore entre os bolsões que
+`aggregate_pocket_scores_by_protein` usa o maior escore entre os *pockets* que
 sustentam cada acesso UniProt:
 
 ```python
@@ -417,7 +418,7 @@ O índice é autoritativo para `pdb_id`, `source_split`,
 - `exploratory`: atribui o escore a todos os acessos informados e marca suporte
   ambíguo ou parcial.
 
-O resultado inclui melhor escore, posição, melhor PDB e bolsão,
+O resultado inclui melhor escore, posição, melhor PDB e *pocket*,
 `best_candidate_library_sha256`, `best_candidate_lmdb_key`, proveniência,
 quantidades de suportes e PDBs, estados de mapeamento e JSON de todos os hits.
 
@@ -443,7 +444,7 @@ compatibilidade; a proveniência exata só é garantida quando fornecido.
 8. Entidades não mapeadas permanecem na tabela normalizada.
 9. Mapeamentos parciais não selecionam um acesso automaticamente.
 10. A agregação estrita exclui suporte parcial ou ambíguo.
-11. A junção exata falha para chave ausente ou bolsão incompatível.
+11. A junção exata falha para chave ausente ou *pocket* incompatível.
 
 ## Comandos de validação
 
@@ -464,7 +465,7 @@ quebraria compatibilidade e esconderia ambiguidades reais.
 
 ### Não escolher o primeiro acesso
 
-A ordem da API não é evidência de propriedade biológica do bolsão. A seleção
+A ordem da API não é evidência de propriedade biológica do *pocket*. A seleção
 automática só ocorre quando o mapeamento completo é inequivocamente único.
 
 ### Não repetir metadados por candidato
