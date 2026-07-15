@@ -7,12 +7,11 @@ reported for those entities.  They do not claim that every returned protein
 contains, contacts, or biologically owns the pocket represented by the LMDB
 record.
 
-The implementation keeps the original ``pocket`` value unchanged.  Enriched
-LMDB files therefore remain compatible with DrugCLIP/BioSensIA target-fishing
-loaders while carrying additional metadata in new fields.  Full normalized
-metadata is stored in Parquet sidecars and per-PDB JSON cache files so API
-responses can be audited and normalization can evolve without rewriting the
-source LMDB files.
+The implementation never rewrites the candidate LMDB.  A lightweight candidate
+index links exact LMDB keys to canonical PDB IDs, while normalized PDB and
+protein-entity metadata live in Parquet sidecars.  Per-PDB JSON cache files keep
+API responses auditable and allow normalization to evolve without duplicating
+entry-level metadata in every LMDB record.
 """
 
 from __future__ import annotations
@@ -42,7 +41,7 @@ DEFAULT_GRAPHQL_TIMEOUT_SECONDS = 60.0
 DEFAULT_CACHE_DIR = Path("data/pdb_graphql_cache")
 DEFAULT_PDB_METADATA_PATH = Path("data/pdb_uniprot_metadata.parquet")
 DEFAULT_ENTITY_METADATA_PATH = Path("data/pdb_entity_uniprot_metadata.parquet")
-DEFAULT_POCKET_METADATA_PATH = Path("data/pocket_uniprot_metadata.parquet")
+DEFAULT_CANDIDATE_INDEX_PATH = Path("data/candidate_pocket_index.parquet")
 CACHE_SCHEMA_VERSION = "1"
 
 PDB_ID_RE = re.compile(r"^[0-9][A-Za-z0-9]{3}$")
@@ -94,6 +93,7 @@ PDB_METADATA_SCHEMA = {
     "pdb_id": pl.String,
     "all_uniprot_accessions": pl.List(pl.String),
     "all_uniprot_isoforms": pl.List(pl.String),
+    "selected_uniprot_accession": pl.String,
     "all_protein_names": pl.List(pl.String),
     "all_organisms": pl.List(pl.String),
     "all_organism_taxonomy_ids": pl.List(pl.String),
@@ -103,9 +103,9 @@ PDB_METADATA_SCHEMA = {
     "entry_mapping_status": pl.String,
     "graphql_status": pl.String,
     "retrieved_at": pl.String,
+    "mapping_method": pl.String,
     "mapping_source": pl.String,
     "query_sha256": pl.String,
-    "protein_entities_json": pl.String,
     "metadata_warnings": pl.List(pl.String),
 }
 
@@ -128,29 +128,15 @@ ENTITY_METADATA_SCHEMA = {
     "retrieved_at": pl.String,
 }
 
-ROW_METADATA_SCHEMA = {
+CANDIDATE_INDEX_SCHEMA = {
+    "candidate_library_sha256": pl.String,
+    "candidate_library_entries": pl.Int64,
+    "candidate_lmdb_key": pl.String,
     "source_split": pl.String,
     "source_lmdb_key": pl.String,
     "raw_pocket_id": pl.String,
     "pdb_id": pl.String,
     "pocket_geometry_hash": pl.String,
-    "entry_uniprot_accessions": pl.List(pl.String),
-    "entry_uniprot_isoforms": pl.List(pl.String),
-    "selected_uniprot_accession": pl.String,
-    "entry_protein_names": pl.List(pl.String),
-    "entry_organisms": pl.List(pl.String),
-    "entry_organism_taxonomy_ids": pl.List(pl.String),
-    "entry_rcsb_polymer_entity_ids": pl.List(pl.String),
-    "entry_label_asym_ids": pl.List(pl.List(pl.String)),
-    "entry_auth_asym_ids": pl.List(pl.List(pl.String)),
-    "protein_entity_count": pl.Int64,
-    "mapped_protein_entity_count": pl.Int64,
-    "protein_mapping_method": pl.String,
-    "protein_mapping_status": pl.String,
-    "protein_mapping_source": pl.String,
-    "protein_mapping_retrieved_at": pl.String,
-    "protein_mapping_query_sha256": pl.String,
-    "metadata_warnings": pl.List(pl.String),
 }
 
 PROTEIN_RANKING_SCHEMA = {
@@ -163,6 +149,8 @@ PROTEIN_RANKING_SCHEMA = {
     "organism_taxonomy_ids": pl.List(pl.String),
     "best_pocket": pl.String,
     "best_pdb_id": pl.String,
+    "best_candidate_library_sha256": pl.String,
+    "best_candidate_lmdb_key": pl.String,
     "best_source_split": pl.String,
     "best_source_lmdb_key": pl.String,
     "best_pocket_geometry_hash": pl.String,
@@ -280,10 +268,10 @@ def collect_lmdb_rows(
 ) -> list[dict[str, Any]]:
     """Collect row identities and PDB-like pocket IDs from LMDB splits.
 
-    The returned lightweight rows are sufficient to build the row-level
-    metadata sidecar.  ``raw_pocket_id`` always preserves the source value;
-    ``pdb_id`` is an uppercase canonical join key or ``None``.  Existing
-    ``pocket_geometry_hash`` values are retained when present.
+    This compatibility utility inventories original split LMDBs before a
+    candidate library is assembled.  ``raw_pocket_id`` always preserves the
+    source value; ``pdb_id`` is an uppercase canonical join key or ``None``.
+    Existing ``pocket_geometry_hash`` values are retained when present.
 
     Parameters
     ----------
@@ -327,6 +315,121 @@ def collect_unique_pdb_ids(rows: Iterable[Mapping[str, Any]]) -> set[str]:
         for row in rows
         if row.get("pdb_id") is not None
     }
+
+
+def build_candidate_pocket_index_frame(
+    candidate_lmdb_path: str | Path,
+) -> pl.DataFrame:
+    """Build an exact, lightweight index for one candidate-pocket LMDB.
+
+    The LMDB key is the primary row identity.  ``source_split`` and
+    ``source_lmdb_key`` preserve provenance when the candidate library was
+    created by :func:`biosensia_target_fishing.build_candidate_pockets_lmdb`.
+    ``pdb_id`` is the foreign key into the PDB and entity metadata sidecars.
+    The original ``pocket`` value is copied to ``raw_pocket_id`` without
+    normalization.
+
+    A SHA-256 digest is calculated from the ordered logical LMDB key/value
+    stream, not from LMDB page bytes.  This makes the library identity stable
+    across equivalent LMDB files with different map sizes or page layouts.
+    The digest and entry count are repeated in the Parquet table; Parquet
+    dictionary encoding keeps this repetition inexpensive and lets any
+    extracted row identify the exact candidate library it belongs to.
+
+    Parameters
+    ----------
+    candidate_lmdb_path:
+        DrugCLIP-compatible candidate-pocket LMDB.  Records must be pickled
+        dictionaries containing a non-empty ``pocket`` field.  Keys must be
+        ASCII text so they can be represented losslessly in Parquet.
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per LMDB entry with ``candidate_lmdb_key`` as the exact primary
+        key and ``pdb_id`` as the metadata foreign key.
+    """
+
+    path = Path(candidate_lmdb_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Candidate pocket LMDB not found: {path}")
+
+    environment = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    rows: list[dict[str, Any]] = []
+    digest = sha256()
+    try:
+        with environment.begin() as transaction:
+            keys = _sort_lmdb_keys(
+                list(transaction.cursor().iternext(values=False))
+            )
+            for key in keys:
+                value = transaction.get(key)
+                if value is None:
+                    continue
+                digest.update(len(key).to_bytes(8, "big"))
+                digest.update(key)
+                digest.update(len(value).to_bytes(8, "big"))
+                digest.update(value)
+
+                record = pickle.loads(value)
+                if not isinstance(record, dict):
+                    raise TypeError(
+                        f"Candidate LMDB record {key!r} in {path} is not a dictionary"
+                    )
+                raw_value = record.get("pocket")
+                raw_pocket_id = "" if raw_value is None else str(raw_value)
+                if not raw_pocket_id.strip():
+                    raise ValueError(
+                        f"Candidate LMDB record {key!r} in {path} has no pocket"
+                    )
+                try:
+                    candidate_lmdb_key = key.decode("ascii")
+                except UnicodeDecodeError as exc:
+                    raise ValueError(
+                        f"Candidate LMDB key {key!r} in {path} is not ASCII"
+                    ) from exc
+                rows.append(
+                    {
+                        "candidate_lmdb_key": candidate_lmdb_key,
+                        "source_split": _optional_string(
+                            record.get("source_split")
+                        ),
+                        "source_lmdb_key": _optional_string(
+                            record.get("source_lmdb_key")
+                        ),
+                        "raw_pocket_id": raw_pocket_id,
+                        "pdb_id": canonicalize_pdb_id(raw_pocket_id),
+                        "pocket_geometry_hash": _optional_string(
+                            record.get("pocket_geometry_hash")
+                        ),
+                    }
+                )
+    finally:
+        environment.close()
+
+    library_sha256 = digest.hexdigest()
+    entry_count = len(rows)
+    indexed_rows = [
+        {
+            "candidate_library_sha256": library_sha256,
+            "candidate_library_entries": entry_count,
+            **row,
+        }
+        for row in rows
+    ]
+    return pl.DataFrame(
+        indexed_rows,
+        schema=CANDIDATE_INDEX_SCHEMA,
+        orient="row",
+    )
 
 
 def fetch_rcsb_graphql_batch(
@@ -635,11 +738,20 @@ def build_pdb_metadata_frame(
     rows = []
     for pdb_id in sorted(pdb_metadata):
         metadata = pdb_metadata[pdb_id]
+        accessions = list(metadata.get("all_uniprot_accessions", []))
+        selected_accession = (
+            accessions[0]
+            if metadata.get("entry_mapping_status")
+            in UNAMBIGUOUS_MAPPING_STATUSES
+            and len(accessions) == 1
+            else None
+        )
         rows.append(
             {
                 "pdb_id": pdb_id,
-                "all_uniprot_accessions": metadata.get("all_uniprot_accessions", []),
+                "all_uniprot_accessions": accessions,
                 "all_uniprot_isoforms": metadata.get("all_uniprot_isoforms", []),
+                "selected_uniprot_accession": selected_accession,
                 "all_protein_names": metadata.get("all_protein_names", []),
                 "all_organisms": metadata.get("all_organisms", []),
                 "all_organism_taxonomy_ids": metadata.get(
@@ -656,13 +768,11 @@ def build_pdb_metadata_frame(
                 "entry_mapping_status": metadata.get("entry_mapping_status"),
                 "graphql_status": metadata.get("graphql_status"),
                 "retrieved_at": metadata.get("retrieved_at"),
+                "mapping_method": metadata.get(
+                    "mapping_method", RCSB_MAPPING_METHOD
+                ),
                 "mapping_source": metadata.get("mapping_source", RCSB_MAPPING_SOURCE),
                 "query_sha256": metadata.get("query_sha256", RCSB_QUERY_SHA256),
-                "protein_entities_json": json.dumps(
-                    metadata.get("protein_entities", []),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
                 "metadata_warnings": metadata.get("metadata_warnings", []),
             }
         )
@@ -726,102 +836,8 @@ def build_entity_uniprot_frame(
     return pl.DataFrame(rows, schema=ENTITY_METADATA_SCHEMA, orient="row")
 
 
-def build_row_level_metadata(
-    lmdb_rows: Iterable[Mapping[str, Any]],
-    pdb_metadata: Mapping[str, Mapping[str, Any]],
-) -> pl.DataFrame:
-    """Join every LMDB row to entry-level metadata by canonical PDB ID.
-
-    ``selected_uniprot_accession`` is populated only for the two unambiguous
-    statuses.  A partial mapping with one observed accession remains unselected
-    because unmapped entities could introduce additional proteins.  Non-PDB
-    pocket values and missing metadata receive explicit failure statuses rather
-    than disappearing from the sidecar.
-    """
-
-    output_rows = []
-    seen_identities: set[tuple[str, str]] = set()
-    for row in lmdb_rows:
-        source_split = str(row["source_split"])
-        source_key = str(row["source_lmdb_key"])
-        identity = (source_split, source_key)
-        if identity in seen_identities:
-            raise ValueError(f"Duplicate LMDB row identity: {identity}")
-        seen_identities.add(identity)
-
-        raw_pocket_id = str(row.get("raw_pocket_id") or "")
-        pdb_id = canonicalize_pdb_id(row.get("pdb_id") or raw_pocket_id)
-        if pdb_id is None:
-            metadata = _failure_metadata(
-                pdb_id=None,
-                status="non_pdb_pocket_id",
-                warning=f"Pocket identifier is not PDB-like: {raw_pocket_id!r}",
-            )
-        else:
-            metadata = dict(
-                pdb_metadata.get(pdb_id)
-                or _failure_metadata(
-                    pdb_id=pdb_id,
-                    status="pdb_metadata_missing",
-                    warning="No PDB metadata was supplied for this row.",
-                )
-            )
-
-        status = metadata["entry_mapping_status"]
-        accessions = list(metadata.get("all_uniprot_accessions", []))
-        selected_accession = (
-            accessions[0]
-            if status in UNAMBIGUOUS_MAPPING_STATUSES and len(accessions) == 1
-            else None
-        )
-        entities = metadata.get("protein_entities", [])
-        output_rows.append(
-            {
-                "source_split": source_split,
-                "source_lmdb_key": source_key,
-                "raw_pocket_id": raw_pocket_id,
-                "pdb_id": pdb_id,
-                "pocket_geometry_hash": _optional_string(
-                    row.get("pocket_geometry_hash")
-                ),
-                "entry_uniprot_accessions": accessions,
-                "entry_uniprot_isoforms": metadata.get("all_uniprot_isoforms", []),
-                "selected_uniprot_accession": selected_accession,
-                "entry_protein_names": metadata.get("all_protein_names", []),
-                "entry_organisms": metadata.get("all_organisms", []),
-                "entry_organism_taxonomy_ids": metadata.get(
-                    "all_organism_taxonomy_ids", []
-                ),
-                "entry_rcsb_polymer_entity_ids": [
-                    entity["rcsb_polymer_entity_id"] for entity in entities
-                ],
-                "entry_label_asym_ids": [
-                    entity.get("label_asym_ids", []) for entity in entities
-                ],
-                "entry_auth_asym_ids": [
-                    entity.get("auth_asym_ids", []) for entity in entities
-                ],
-                "protein_entity_count": metadata.get("protein_entity_count", 0),
-                "mapped_protein_entity_count": metadata.get(
-                    "mapped_protein_entity_count", 0
-                ),
-                "protein_mapping_method": RCSB_MAPPING_METHOD,
-                "protein_mapping_status": status,
-                "protein_mapping_source": metadata.get(
-                    "mapping_source", RCSB_MAPPING_SOURCE
-                ),
-                "protein_mapping_retrieved_at": metadata.get("retrieved_at"),
-                "protein_mapping_query_sha256": metadata.get(
-                    "query_sha256", RCSB_QUERY_SHA256
-                ),
-                "metadata_warnings": metadata.get("metadata_warnings", []),
-            }
-        )
-    return pl.DataFrame(output_rows, schema=ROW_METADATA_SCHEMA, orient="row")
-
-
 def build_uniprot_metadata_sidecars(
-    lmdb_paths: Mapping[str, str | Path],
+    candidate_lmdb_path: str | Path,
     *,
     output_dir: str | Path = "data",
     cache_dir: str | Path | None = None,
@@ -831,23 +847,55 @@ def build_uniprot_metadata_sidecars(
     timeout_seconds: float = DEFAULT_GRAPHQL_TIMEOUT_SECONDS,
     transport: GraphQLTransport | None = None,
 ) -> dict[str, Any]:
-    """Build all normalized Parquet sidecars for one or more LMDB splits.
+    """Build three Parquet sidecars without modifying the candidate LMDB.
 
-    This is the high-level metadata workflow.  It scans LMDB rows, fetches or
-    reuses entry metadata, writes PDB summaries, writes the normalized
-    entity/accession relation, and writes one row of joinable metadata per
-    source LMDB record.  Source LMDB files are never modified.
+    The output consists of a one-row-per-PDB summary, a normalized
+    protein-entity-to-UniProt relation, and a lightweight exact index of the
+    candidate LMDB.  Entry-level metadata is never copied into LMDB records or
+    repeated in the candidate index.  The index joins to both metadata tables
+    through ``pdb_id`` and joins back to the binary library through
+    ``candidate_lmdb_key`` plus ``candidate_library_sha256``.
 
-    Returns a dictionary containing the three frames, their output paths,
-    cache directory, row count, and unique PDB count.  An injectable transport
-    makes the complete workflow deterministic in tests and offline fixtures.
+    Parameters
+    ----------
+    candidate_lmdb_path:
+        Candidate-pocket library used by BioSensIA target fishing.  Its records
+        are read only and remain byte-for-byte unchanged.
+    output_dir:
+        Directory receiving ``pdb_uniprot_metadata.parquet``,
+        ``pdb_entity_uniprot_metadata.parquet``, and
+        ``candidate_pocket_index.parquet``.
+    cache_dir:
+        Directory for normalized per-PDB JSON and raw GraphQL responses.
+        Defaults to ``<output_dir>/pdb_graphql_cache``.
+    batch_size:
+        Maximum number of PDB IDs per GraphQL request.
+    refresh:
+        Ignore compatible normalized cache entries when true.
+    endpoint, timeout_seconds, transport:
+        Network configuration passed to build_pdb_uniprot_cache.
+        ``transport`` is injectable for deterministic offline tests.
+
+    Returns
+    -------
+    dict[str, Any]
+        The three dataframes, output paths, cache path, candidate row count,
+        candidate library digest, and unique PDB count.
     """
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    resolved_cache_dir = Path(cache_dir) if cache_dir is not None else output_path / "pdb_graphql_cache"
-    lmdb_rows = collect_lmdb_rows(lmdb_paths)
-    pdb_ids = collect_unique_pdb_ids(lmdb_rows)
+    resolved_cache_dir = (
+        Path(cache_dir)
+        if cache_dir is not None
+        else output_path / "pdb_graphql_cache"
+    )
+    candidate_index = build_candidate_pocket_index_frame(candidate_lmdb_path)
+    pdb_ids = {
+        pdb_id
+        for pdb_id in candidate_index["pdb_id"].to_list()
+        if pdb_id is not None
+    }
     metadata = build_pdb_uniprot_cache(
         pdb_ids,
         resolved_cache_dir,
@@ -859,179 +907,30 @@ def build_uniprot_metadata_sidecars(
     )
     pdb_frame = build_pdb_metadata_frame(metadata)
     entity_frame = build_entity_uniprot_frame(metadata)
-    row_frame = build_row_level_metadata(lmdb_rows, metadata)
 
     pdb_output = output_path / DEFAULT_PDB_METADATA_PATH.name
     entity_output = output_path / DEFAULT_ENTITY_METADATA_PATH.name
-    row_output = output_path / DEFAULT_POCKET_METADATA_PATH.name
+    candidate_index_output = output_path / DEFAULT_CANDIDATE_INDEX_PATH.name
     pdb_frame.write_parquet(pdb_output)
     entity_frame.write_parquet(entity_output)
-    row_frame.write_parquet(row_output)
+    candidate_index.write_parquet(candidate_index_output)
+    candidate_library_sha256 = (
+        candidate_index["candidate_library_sha256"][0]
+        if candidate_index.height
+        else sha256().hexdigest()
+    )
     return {
         "pdb_metadata": pdb_frame,
         "entity_metadata": entity_frame,
-        "row_metadata": row_frame,
+        "candidate_index": candidate_index,
         "pdb_metadata_path": str(pdb_output),
         "entity_metadata_path": str(entity_output),
-        "row_metadata_path": str(row_output),
+        "candidate_index_path": str(candidate_index_output),
         "cache_dir": str(resolved_cache_dir),
-        "lmdb_rows": len(lmdb_rows),
+        "candidate_lmdb_path": str(candidate_lmdb_path),
+        "candidate_rows": candidate_index.height,
+        "candidate_library_sha256": candidate_library_sha256,
         "unique_pdb_ids": len(pdb_ids),
-    }
-
-
-def write_enriched_lmdb(
-    source_lmdb: str | Path,
-    metadata_df: pl.DataFrame,
-    output_lmdb: str | Path,
-    *,
-    source_split: str | None = None,
-    overwrite: bool = False,
-    on_missing: str = "error",
-    map_size: int | None = None,
-    commit_interval: int = 1000,
-) -> dict[str, Any]:
-    """Copy an LMDB and add compact entry-level UniProt metadata fields.
-
-    The source record is copied before enrichment and ``record["pocket"]`` is
-    explicitly checked after updates, guaranteeing that the original
-    PDB-like identifier is unchanged.  Extra fields are ignored by the
-    DrugCLIP pocket loader, so the resulting LMDB remains usable as a candidate
-    pocket library.
-
-    Candidate libraries assembled from multiple splits can be enriched because
-    existing ``source_split`` and ``source_lmdb_key`` fields take precedence
-    over the function's ``source_split`` argument and current LMDB key.  For a
-    raw split LMDB, pass ``source_split`` so rows match the sidecar identity.
-
-    Parameters
-    ----------
-    source_lmdb:
-        Original or candidate-library LMDB to copy.
-    metadata_df:
-        Row-level frame returned by :func:`build_row_level_metadata`.
-    output_lmdb:
-        New enriched LMDB path.  The source path may not be reused.
-    source_split:
-        Split identity for raw LMDBs without embedded provenance.
-    overwrite:
-        Replace an existing output path.
-    on_missing:
-        ``"error"`` raises when metadata is absent; ``"keep"`` copies that
-        record without enrichment and reports it in the summary.
-    map_size:
-        Optional LMDB map size.  Defaults to twice the source map size.
-    commit_interval:
-        Number of records per write transaction.
-
-    Returns
-    -------
-    dict[str, Any]
-        Counts and paths for the completed enriched copy.
-    """
-
-    if on_missing not in {"error", "keep"}:
-        raise ValueError("on_missing must be 'error' or 'keep'")
-    if commit_interval <= 0:
-        raise ValueError("commit_interval must be greater than 0")
-
-    source_path = Path(source_lmdb)
-    output_path = Path(output_lmdb)
-    if source_path.resolve() == output_path.resolve():
-        raise ValueError("output_lmdb must differ from source_lmdb")
-    if not source_path.exists():
-        raise FileNotFoundError(f"Source LMDB not found: {source_path}")
-    if output_path.exists() and not overwrite:
-        raise FileExistsError(f"LMDB already exists: {output_path}")
-
-    metadata_lookup: dict[tuple[str, str], dict[str, Any]] = {}
-    for row in metadata_df.iter_rows(named=True):
-        identity = (str(row["source_split"]), str(row["source_lmdb_key"]))
-        if identity in metadata_lookup:
-            raise ValueError(f"Duplicate metadata identity: {identity}")
-        metadata_lookup[identity] = row
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = output_path.with_name(f".{output_path.name}.tmp")
-    temporary_path.unlink(missing_ok=True)
-
-    source_environment = lmdb.open(
-        str(source_path),
-        subdir=False,
-        readonly=True,
-        lock=False,
-        readahead=False,
-        meminit=False,
-        max_readers=256,
-    )
-    resolved_map_size = map_size or source_environment.info()["map_size"] * 2
-    output_environment = lmdb.open(
-        str(temporary_path),
-        subdir=False,
-        readonly=False,
-        lock=False,
-        readahead=False,
-        meminit=False,
-        map_size=resolved_map_size,
-    )
-    transaction = output_environment.begin(write=True)
-    enriched = 0
-    missing = 0
-    completed = False
-    try:
-        with source_environment.begin() as source_transaction:
-            for index, (key, value) in enumerate(source_transaction.cursor(), start=1):
-                record = pickle.loads(value)
-                if not isinstance(record, dict):
-                    raise TypeError(f"Source LMDB record {key!r} is not a dictionary")
-                key_text = key.decode("ascii", errors="replace")
-                identity = (
-                    str(record.get("source_split") or source_split or ""),
-                    str(record.get("source_lmdb_key") or key_text),
-                )
-                metadata = metadata_lookup.get(identity)
-                if metadata is None:
-                    if on_missing == "error":
-                        raise KeyError(f"No metadata for LMDB row identity {identity}")
-                    missing += 1
-                    output_record = dict(record)
-                else:
-                    original_pocket = record.get("pocket")
-                    output_record = dict(record)
-                    output_record.update(_compact_lmdb_metadata(metadata))
-                    if output_record.get("pocket") != original_pocket:
-                        raise AssertionError("Enrichment changed record['pocket']")
-                    enriched += 1
-
-                transaction.put(
-                    key,
-                    pickle.dumps(output_record, protocol=pickle.HIGHEST_PROTOCOL),
-                )
-                if index % commit_interval == 0:
-                    transaction.commit()
-                    transaction = output_environment.begin(write=True)
-            transaction.commit()
-            transaction = None
-            completed = True
-    except Exception:
-        if transaction is not None:
-            transaction.abort()
-        raise
-    finally:
-        source_environment.close()
-        output_environment.close()
-        if not completed:
-            temporary_path.unlink(missing_ok=True)
-
-    if output_path.exists():
-        output_path.unlink()
-    temporary_path.replace(output_path)
-    return {
-        "source_lmdb": str(source_path),
-        "output_lmdb": str(output_path),
-        "enriched_records": enriched,
-        "missing_metadata_records": missing,
-        "records": enriched + missing,
     }
 
 
@@ -1039,10 +938,12 @@ def aggregate_pocket_scores_by_protein(
     ranked_pockets: pl.DataFrame,
     entity_metadata: pl.DataFrame,
     *,
+    candidate_index: pl.DataFrame | None = None,
     ambiguity_mode: str = "strict",
     query_column: str | None = "query",
     pocket_column: str = "pocket",
     score_column: str = "drugclip_score",
+    candidate_key_column: str = "candidate_lmdb_key",
 ) -> pl.DataFrame:
     """Aggregate ranked pocket hits into detailed UniProt protein rankings.
 
@@ -1052,12 +953,13 @@ def aggregate_pocket_scores_by_protein(
     mode, every reported accession receives the pocket score and ambiguous or
     partial evidence is flagged.
 
-    The result reports the best supporting pocket and available source-row
-    provenance, support count, unique PDB count, all supporting PDB and pocket
-    identifiers, mapping statuses, ambiguity, associated names/organisms, and
-    a JSON representation of every supporting hit.  ``support_count`` counts
-    ranked candidate rows while ``unique_pdb_count`` exposes representation
-    imbalance from repeated structures or augmented pocket geometries.
+    The result reports the best supporting pocket and available candidate and
+    source-row provenance, support count, unique PDB count, all supporting PDB
+    and pocket identifiers, mapping statuses, ambiguity, associated
+    names/organisms, and a JSON representation of every supporting hit.
+    ``support_count`` counts ranked candidate rows while ``unique_pdb_count``
+    exposes representation imbalance from repeated structures or augmented
+    pocket geometries.
 
     Parameters
     ----------
@@ -1069,9 +971,15 @@ def aggregate_pocket_scores_by_protein(
         synthetic query named ``"__single_query__"``.
     entity_metadata:
         Normalized frame from :func:`build_entity_uniprot_frame`.
+    candidate_index:
+        Optional exact index from :func:`build_candidate_pocket_index_frame`.
+        When supplied, every ranked row must carry ``candidate_key_column``.
+        Candidate-library identity, canonical PDB ID, source provenance, and
+        geometry hash are then read from the index rather than trusted from
+        duplicated ranking columns.
     ambiguity_mode:
         ``"strict"`` or ``"exploratory"``.
-    query_column, pocket_column, score_column:
+    query_column, pocket_column, score_column, candidate_key_column:
         Input column names.
 
     Returns
@@ -1087,10 +995,28 @@ def aggregate_pocket_scores_by_protein(
         raise ValueError(f"Ranked pocket table is missing columns: {sorted(missing_columns)}")
 
     entity_lookup = _build_entity_ranking_lookup(entity_metadata)
+    candidate_lookup = _build_candidate_index_lookup(
+        ranked_pockets,
+        candidate_index,
+        candidate_key_column=candidate_key_column,
+    )
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for hit_index, hit in enumerate(ranked_pockets.iter_rows(named=True)):
         raw_pocket = str(hit[pocket_column])
-        pdb_id = canonicalize_pdb_id(hit.get("pdb_id") or raw_pocket)
+        indexed_candidate = None
+        candidate_lmdb_key = _optional_string(hit.get(candidate_key_column))
+        if candidate_lookup is not None:
+            indexed_candidate = candidate_lookup[candidate_lmdb_key]
+            if indexed_candidate["raw_pocket_id"] != raw_pocket:
+                raise ValueError(
+                    "Ranked pocket does not match candidate index for key "
+                    f"{candidate_lmdb_key!r}: {raw_pocket!r} != "
+                    f"{indexed_candidate['raw_pocket_id']!r}"
+                )
+        provenance = indexed_candidate if indexed_candidate is not None else hit
+        pdb_id = canonicalize_pdb_id(
+            provenance.get("pdb_id") or raw_pocket
+        )
         if pdb_id is None or pdb_id not in entity_lookup:
             continue
         query = (
@@ -1108,10 +1034,18 @@ def aggregate_pocket_scores_by_protein(
                 "pocket": raw_pocket,
                 "pdb_id": pdb_id,
                 "score": score,
-                "source_split": _optional_string(hit.get("source_split")),
-                "source_lmdb_key": _optional_string(hit.get("source_lmdb_key")),
+                "candidate_library_sha256": _optional_string(
+                    provenance.get("candidate_library_sha256")
+                ),
+                "candidate_lmdb_key": candidate_lmdb_key,
+                "source_split": _optional_string(
+                    provenance.get("source_split")
+                ),
+                "source_lmdb_key": _optional_string(
+                    provenance.get("source_lmdb_key")
+                ),
                 "pocket_geometry_hash": _optional_string(
-                    hit.get("pocket_geometry_hash")
+                    provenance.get("pocket_geometry_hash")
                 ),
                 "mapping_status": status,
                 "rcsb_polymer_entity_ids": relation["rcsb_polymer_entity_ids"],
@@ -1151,6 +1085,10 @@ def aggregate_pocket_scores_by_protein(
                 "organism_taxonomy_ids": sorted(group["organism_taxonomy_ids"]),
                 "best_pocket": best["pocket"],
                 "best_pdb_id": best["pdb_id"],
+                "best_candidate_library_sha256": best[
+                    "candidate_library_sha256"
+                ],
+                "best_candidate_lmdb_key": best["candidate_lmdb_key"],
                 "best_source_split": best["source_split"],
                 "best_source_lmdb_key": best["source_lmdb_key"],
                 "best_pocket_geometry_hash": best["pocket_geometry_hash"],
@@ -1501,39 +1439,6 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     temporary_path.replace(path)
 
 
-def _compact_lmdb_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        "pdb_id": metadata.get("pdb_id"),
-        "entry_uniprot_accessions": list(
-            metadata.get("entry_uniprot_accessions") or []
-        ),
-        "entry_uniprot_isoforms": list(metadata.get("entry_uniprot_isoforms") or []),
-        "selected_uniprot_accession": metadata.get("selected_uniprot_accession"),
-        "entry_protein_names": list(metadata.get("entry_protein_names") or []),
-        "entry_organisms": list(metadata.get("entry_organisms") or []),
-        "entry_organism_taxonomy_ids": list(
-            metadata.get("entry_organism_taxonomy_ids") or []
-        ),
-        "entry_rcsb_polymer_entity_ids": list(
-            metadata.get("entry_rcsb_polymer_entity_ids") or []
-        ),
-        "entry_label_asym_ids": list(metadata.get("entry_label_asym_ids") or []),
-        "entry_auth_asym_ids": list(metadata.get("entry_auth_asym_ids") or []),
-        "protein_entity_count": metadata.get("protein_entity_count"),
-        "mapped_protein_entity_count": metadata.get("mapped_protein_entity_count"),
-        "protein_mapping_method": metadata.get("protein_mapping_method"),
-        "protein_mapping_status": metadata.get("protein_mapping_status"),
-        "protein_mapping_source": metadata.get("protein_mapping_source"),
-        "protein_mapping_retrieved_at": metadata.get(
-            "protein_mapping_retrieved_at"
-        ),
-        "protein_mapping_query_sha256": metadata.get(
-            "protein_mapping_query_sha256"
-        ),
-        "protein_metadata_warnings": list(metadata.get("metadata_warnings") or []),
-    }
-
-
 def _build_entity_ranking_lookup(
     entity_metadata: pl.DataFrame,
 ) -> dict[str, dict[str, dict[str, Any]]]:
@@ -1586,6 +1491,70 @@ def _build_entity_ranking_lookup(
                 "rcsb_polymer_entity_ids",
             ):
                 relation[key] = sorted(relation[key])
+    return lookup
+
+
+def _build_candidate_index_lookup(
+    ranked_pockets: pl.DataFrame,
+    candidate_index: pl.DataFrame | None,
+    *,
+    candidate_key_column: str,
+) -> dict[str, dict[str, Any]] | None:
+    """Validate and index an optional candidate-library sidecar.
+
+    The validation prevents an exact LMDB key from being interpreted against
+    the wrong library, rejects duplicate keys, and requires every ranked row
+    to resolve before protein aggregation begins.
+    """
+
+    if candidate_index is None:
+        return None
+    if candidate_key_column not in ranked_pockets.columns:
+        raise ValueError(
+            "Ranked pocket table must contain "
+            f"{candidate_key_column!r} when candidate_index is supplied"
+        )
+    missing = set(CANDIDATE_INDEX_SCHEMA).difference(candidate_index.columns)
+    if missing:
+        raise ValueError(f"Candidate index is missing columns: {sorted(missing)}")
+
+    lookup: dict[str, dict[str, Any]] = {}
+    library_digests: set[str] = set()
+    declared_entry_counts: set[int] = set()
+    for row in candidate_index.iter_rows(named=True):
+        key = _optional_string(row.get("candidate_lmdb_key"))
+        if key is None:
+            raise ValueError("Candidate index contains a null or empty LMDB key")
+        if key in lookup:
+            raise ValueError(f"Candidate index contains duplicate LMDB key {key!r}")
+        digest = _optional_string(row.get("candidate_library_sha256"))
+        if digest is None:
+            raise ValueError("Candidate index contains an empty library digest")
+        library_digests.add(digest)
+        declared_entry_counts.add(int(row["candidate_library_entries"]))
+        lookup[key] = row
+
+    if len(library_digests) > 1:
+        raise ValueError("Candidate index combines more than one candidate library")
+    if len(declared_entry_counts) > 1:
+        raise ValueError("Candidate index has inconsistent library entry counts")
+    if declared_entry_counts and declared_entry_counts != {candidate_index.height}:
+        raise ValueError(
+            "Candidate index entry count does not match the number of index rows"
+        )
+
+    ranked_keys = []
+    for value in ranked_pockets[candidate_key_column].to_list():
+        key = _optional_string(value)
+        if key is None:
+            raise ValueError("Ranked pocket table contains a null candidate LMDB key")
+        ranked_keys.append(key)
+    unresolved = sorted(set(ranked_keys).difference(lookup))
+    if unresolved:
+        raise ValueError(
+            "Ranked pocket table contains keys absent from candidate index: "
+            f"{unresolved}"
+        )
     return lookup
 
 
@@ -1666,11 +1635,12 @@ def _sort_lmdb_keys(keys: list[bytes]) -> list[bytes]:
 
 __all__ = [
     "CACHE_SCHEMA_VERSION",
+    "CANDIDATE_INDEX_SCHEMA",
     "DEFAULT_CACHE_DIR",
+    "DEFAULT_CANDIDATE_INDEX_PATH",
     "DEFAULT_ENTITY_METADATA_PATH",
     "DEFAULT_GRAPHQL_BATCH_SIZE",
     "DEFAULT_PDB_METADATA_PATH",
-    "DEFAULT_POCKET_METADATA_PATH",
     "ENTITY_METADATA_SCHEMA",
     "PDB_ID_RE",
     "PDB_METADATA_SCHEMA",
@@ -1678,13 +1648,12 @@ __all__ = [
     "RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY",
     "RCSB_GRAPHQL_ENDPOINT",
     "RCSBGraphQLError",
-    "ROW_METADATA_SCHEMA",
     "UNAMBIGUOUS_MAPPING_STATUSES",
     "aggregate_pocket_scores_by_protein",
+    "build_candidate_pocket_index_frame",
     "build_entity_uniprot_frame",
     "build_pdb_metadata_frame",
     "build_pdb_uniprot_cache",
-    "build_row_level_metadata",
     "build_uniprot_metadata_sidecars",
     "canonicalize_pdb_id",
     "collect_lmdb_rows",
@@ -1695,5 +1664,4 @@ __all__ = [
     "iter_lmdb_records",
     "normalize_rcsb_entry",
     "utc_now_iso",
-    "write_enriched_lmdb",
 ]

@@ -1,28 +1,30 @@
 import json
+import subprocess
 import urllib.error
+from hashlib import sha256
 from pathlib import Path
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 import biosensia_uniprot_enrichment as enrichment
 from biosensia_uniprot_enrichment import (
     RCSB_ENTRY_PROTEIN_MAPPINGS_QUERY,
     RCSBGraphQLError,
     aggregate_pocket_scores_by_protein,
+    build_candidate_pocket_index_frame,
     build_entity_uniprot_frame,
     build_pdb_metadata_frame,
     build_pdb_uniprot_cache,
-    build_row_level_metadata,
     build_uniprot_metadata_sidecars,
     collect_lmdb_rows,
     determine_entry_mapping_status,
     fetch_rcsb_graphql_batch,
     is_pdb_id,
     normalize_rcsb_entry,
-    write_enriched_lmdb,
 )
-from lmdb_helpers import read_lmdb_records, write_lmdb_records
+from lmdb_helpers import write_lmdb_records
 
 
 def protein_entity(
@@ -94,8 +96,13 @@ def normalized_entry(pdb_id: str, entities: list[dict]) -> dict:
     )
 
 
-def write_test_lmdb(path: Path, records: list[dict]) -> None:
-    write_lmdb_records(records, path, overwrite=True, map_size=1 << 20)
+def write_test_lmdb(
+    path: Path,
+    records: list[dict],
+    *,
+    map_size: int = 1 << 20,
+) -> None:
+    write_lmdb_records(records, path, overwrite=True, map_size=map_size)
 
 
 def test_graphql_query_uses_current_documented_rcsb_fields():
@@ -425,7 +432,7 @@ def test_collect_lmdb_rows_preserves_raw_pocket_and_canonicalizes_join_key(tmp_p
     assert not is_pdb_id("P67775")
 
 
-def test_frames_preserve_normalized_relations_and_row_selection_rules():
+def test_frames_preserve_normalized_relations_and_entry_selection_rules():
     metadata = {
         "1ABC": normalized_entry(
             "1abc",
@@ -438,35 +445,14 @@ def test_frames_preserve_normalized_relations_and_row_selection_rules():
     }
     pdb_frame = build_pdb_metadata_frame(metadata)
     entity_frame = build_entity_uniprot_frame(metadata)
-    row_frame = build_row_level_metadata(
-        [
-            {
-                "source_split": "train",
-                "source_lmdb_key": "0",
-                "raw_pocket_id": "1abc",
-                "pdb_id": "1ABC",
-                "pocket_geometry_hash": None,
-            },
-            {
-                "source_split": "train",
-                "source_lmdb_key": "1",
-                "raw_pocket_id": "2def",
-                "pdb_id": "2DEF",
-                "pocket_geometry_hash": None,
-            },
-            {
-                "source_split": "train",
-                "source_lmdb_key": "2",
-                "raw_pocket_id": "not-pdb",
-                "pdb_id": None,
-                "pocket_geometry_hash": None,
-            },
-        ],
-        metadata,
-    )
 
     assert pdb_frame.schema == enrichment.PDB_METADATA_SCHEMA
     assert entity_frame.schema == enrichment.ENTITY_METADATA_SCHEMA
+    summaries = {row["pdb_id"]: row for row in pdb_frame.to_dicts()}
+    assert summaries["1ABC"]["selected_uniprot_accession"] == "P11111"
+    assert summaries["1ABC"]["mapping_method"] == enrichment.RCSB_MAPPING_METHOD
+    assert summaries["2DEF"]["entry_mapping_status"] == "partial_uniprot_mapping"
+    assert summaries["2DEF"]["selected_uniprot_accession"] is None
     assert entity_frame.filter(pl.col("pdb_id") == "2DEF").height == 2
     assert (
         entity_frame.filter(
@@ -475,17 +461,12 @@ def test_frames_preserve_normalized_relations_and_row_selection_rules():
         )["uniprot_accession"][0]
         is None
     )
-    rows = row_frame.to_dicts()
-    assert rows[0]["selected_uniprot_accession"] == "P11111"
-    assert rows[1]["protein_mapping_status"] == "partial_uniprot_mapping"
-    assert rows[1]["selected_uniprot_accession"] is None
-    assert rows[2]["protein_mapping_status"] == "non_pdb_pocket_id"
 
 
-def test_write_enriched_lmdb_keeps_original_pocket_identifier(tmp_path):
-    source_path = tmp_path / "candidate.lmdb"
+def test_candidate_index_is_lightweight_exact_and_does_not_modify_lmdb(tmp_path):
+    candidate_path = tmp_path / "candidate.lmdb"
     write_test_lmdb(
-        source_path,
+        candidate_path,
         [
             {
                 "pocket": "1aBc",
@@ -493,69 +474,74 @@ def test_write_enriched_lmdb_keeps_original_pocket_identifier(tmp_path):
                 "pocket_coordinates": [[0.0, 0.0, 0.0]],
                 "source_split": "train",
                 "source_lmdb_key": "7",
-                "custom_field": "kept",
-            }
+                "pocket_geometry_hash": "geometry-1",
+            },
+            {"pocket": "AlphaFold-model", "source_split": "test"},
         ],
     )
-    metadata = normalized_entry("1abc", [protein_entity("1", ["P11111"])])
-    row_frame = build_row_level_metadata(
-        [
-            {
-                "source_split": "train",
-                "source_lmdb_key": "7",
-                "raw_pocket_id": "1aBc",
-                "pdb_id": "1ABC",
-                "pocket_geometry_hash": None,
-            }
-        ],
-        {"1ABC": metadata},
+    before = sha256(candidate_path.read_bytes()).hexdigest()
+
+    index = build_candidate_pocket_index_frame(candidate_path)
+
+    after = sha256(candidate_path.read_bytes()).hexdigest()
+    assert before == after
+    assert index.schema == enrichment.CANDIDATE_INDEX_SCHEMA
+    assert index.columns == list(enrichment.CANDIDATE_INDEX_SCHEMA)
+    rows = index.to_dicts()
+    assert [row["candidate_lmdb_key"] for row in rows] == ["0", "1"]
+    assert rows[0]["raw_pocket_id"] == "1aBc"
+    assert rows[0]["pdb_id"] == "1ABC"
+    assert rows[0]["source_lmdb_key"] == "7"
+    assert rows[0]["pocket_geometry_hash"] == "geometry-1"
+    assert rows[1]["pdb_id"] is None
+    assert rows[1]["source_lmdb_key"] is None
+    assert {row["candidate_library_entries"] for row in rows} == {2}
+    assert len(rows[0]["candidate_library_sha256"]) == 64
+    assert len({row["candidate_library_sha256"] for row in rows}) == 1
+    assert "entry_mapping_status" not in index.columns
+    assert "all_uniprot_accessions" not in index.columns
+
+
+def test_candidate_library_digest_uses_logical_records_not_lmdb_layout(tmp_path):
+    records = [
+        {"pocket": "1abc", "payload": "a"},
+        {"pocket": "2def", "payload": "b"},
+    ]
+    first_path = tmp_path / "first.lmdb"
+    second_path = tmp_path / "second.lmdb"
+    changed_path = tmp_path / "changed.lmdb"
+    write_test_lmdb(first_path, records, map_size=1 << 20)
+    write_test_lmdb(second_path, records, map_size=1 << 24)
+    write_test_lmdb(
+        changed_path,
+        [records[0], {"pocket": "2def", "payload": "changed"}],
     )
 
-    output_path = tmp_path / "candidate.enriched.lmdb"
-    summary = write_enriched_lmdb(source_path, row_frame, output_path)
-    record = read_lmdb_records(output_path)[0]
+    first_digest = build_candidate_pocket_index_frame(first_path)[
+        "candidate_library_sha256"
+    ][0]
+    second_digest = build_candidate_pocket_index_frame(second_path)[
+        "candidate_library_sha256"
+    ][0]
+    changed_digest = build_candidate_pocket_index_frame(changed_path)[
+        "candidate_library_sha256"
+    ][0]
 
-    assert summary["enriched_records"] == 1
-    assert record["pocket"] == "1aBc"
-    assert record["custom_field"] == "kept"
-    assert record["pdb_id"] == "1ABC"
-    assert record["entry_uniprot_accessions"] == ["P11111"]
-    assert record["selected_uniprot_accession"] == "P11111"
-    assert record["protein_mapping_status"] == "ok_single_uniprot"
-
-
-def test_write_enriched_lmdb_supports_raw_split_identity(tmp_path):
-    source_path = tmp_path / "train.lmdb"
-    write_test_lmdb(source_path, [{"pocket": "1abc", "value": 42}])
-    metadata = normalized_entry("1abc", [protein_entity("1", ["P11111"])])
-    row_frame = build_row_level_metadata(
-        [
-            {
-                "source_split": "train",
-                "source_lmdb_key": "0",
-                "raw_pocket_id": "1abc",
-                "pdb_id": "1ABC",
-                "pocket_geometry_hash": None,
-            }
-        ],
-        {"1ABC": metadata},
-    )
-
-    output_path = tmp_path / "train.enriched.lmdb"
-    write_enriched_lmdb(
-        source_path,
-        row_frame,
-        output_path,
-        source_split="train",
-    )
-
-    record = read_lmdb_records(output_path)[0]
-    assert record["pocket"] == "1abc"
-    assert record["value"] == 42
-    assert record["entry_uniprot_accessions"] == ["P11111"]
+    assert first_digest == second_digest
+    assert changed_digest != first_digest
 
 
-def test_aggregate_pocket_scores_by_protein_reports_support_and_ambiguity():
+def test_candidate_index_rejects_missing_pocket_identifier(tmp_path):
+    candidate_path = tmp_path / "candidate.lmdb"
+    write_test_lmdb(candidate_path, [{"payload": "missing pocket"}])
+
+    with pytest.raises(ValueError, match="has no pocket"):
+        build_candidate_pocket_index_frame(candidate_path)
+
+
+def test_aggregate_pocket_scores_by_protein_reports_support_and_ambiguity(
+    tmp_path,
+):
     metadata = {
         "1ABC": normalized_entry(
             "1abc",
@@ -574,31 +560,50 @@ def test_aggregate_pocket_scores_by_protein_reports_support_and_ambiguity():
         ),
     }
     entity_frame = build_entity_uniprot_frame(metadata)
+    candidate_path = tmp_path / "candidate.lmdb"
+    write_test_lmdb(
+        candidate_path,
+        [
+            {
+                "pocket": "1abc",
+                "source_split": "train",
+                "source_lmdb_key": "10",
+                "pocket_geometry_hash": "g1",
+            },
+            {
+                "pocket": "2def",
+                "source_split": "valid",
+                "source_lmdb_key": "20",
+                "pocket_geometry_hash": "g2",
+            },
+            {
+                "pocket": "3ghi",
+                "source_split": "test",
+                "source_lmdb_key": "30",
+                "pocket_geometry_hash": "g3",
+            },
+        ],
+    )
+    candidate_index = build_candidate_pocket_index_frame(candidate_path)
     ranked = pl.DataFrame(
         [
             {
                 "query": "aspirin",
                 "pocket": "1abc",
                 "drugclip_score": 0.8,
-                "source_split": "train",
-                "source_lmdb_key": "0",
-                "pocket_geometry_hash": "g1",
+                "candidate_lmdb_key": "0",
             },
             {
                 "query": "aspirin",
                 "pocket": "2def",
                 "drugclip_score": 0.9,
-                "source_split": "train",
-                "source_lmdb_key": "1",
-                "pocket_geometry_hash": "g2",
+                "candidate_lmdb_key": "1",
             },
             {
                 "query": "aspirin",
                 "pocket": "3ghi",
                 "drugclip_score": 0.7,
-                "source_split": "train",
-                "source_lmdb_key": "2",
-                "pocket_geometry_hash": "g3",
+                "candidate_lmdb_key": "2",
             },
         ]
     )
@@ -606,11 +611,13 @@ def test_aggregate_pocket_scores_by_protein_reports_support_and_ambiguity():
     strict = aggregate_pocket_scores_by_protein(
         ranked,
         entity_frame,
+        candidate_index=candidate_index,
         ambiguity_mode="strict",
     )
     exploratory = aggregate_pocket_scores_by_protein(
         ranked,
         entity_frame,
+        candidate_index=candidate_index,
         ambiguity_mode="exploratory",
     )
 
@@ -618,7 +625,11 @@ def test_aggregate_pocket_scores_by_protein_reports_support_and_ambiguity():
     assert strict_row["uniprot_accession"] == "P11111"
     assert strict_row["protein_score"] == 0.8
     assert strict_row["best_pocket"] == "1abc"
-    assert strict_row["best_source_lmdb_key"] == "0"
+    assert strict_row["best_candidate_lmdb_key"] == "0"
+    assert strict_row["best_source_lmdb_key"] == "10"
+    assert strict_row["best_candidate_library_sha256"] == candidate_index[
+        "candidate_library_sha256"
+    ][0]
     assert strict_row["support_count"] == 2
     assert strict_row["unique_pdb_count"] == 2
     assert strict_row["supporting_pdb_ids"] == ["1ABC", "3GHI"]
@@ -637,21 +648,58 @@ def test_aggregate_pocket_scores_by_protein_reports_support_and_ambiguity():
     assert exploratory_rows[1]["protein_score"] == 0.9
     assert exploratory_rows[1]["has_ambiguous_support"] is True
     supporting_hits = json.loads(exploratory_rows[0]["supporting_hits_json"])
-    assert supporting_hits[1]["source_split"] == "train"
+    assert supporting_hits[1]["candidate_lmdb_key"] == "1"
+    assert supporting_hits[1]["source_split"] == "valid"
     assert supporting_hits[1]["pocket_geometry_hash"] == "g2"
 
 
-def test_end_to_end_sidecars_and_enriched_candidate_lmdb_smoke(tmp_path):
-    source_dir = tmp_path / "source"
-    train_path = source_dir / "train.lmdb"
+def test_aggregate_rejects_ranked_rows_that_do_not_match_candidate_index(tmp_path):
+    metadata = {
+        "1ABC": normalized_entry(
+            "1abc",
+            [protein_entity("1", ["P11111"])],
+        )
+    }
+    candidate_path = tmp_path / "candidate.lmdb"
+    write_test_lmdb(candidate_path, [{"pocket": "1abc"}])
+    candidate_index = build_candidate_pocket_index_frame(candidate_path)
+    ranked = pl.DataFrame(
+        {
+            "pocket": ["2def"],
+            "drugclip_score": [0.5],
+            "candidate_lmdb_key": ["0"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="does not match candidate index"):
+        aggregate_pocket_scores_by_protein(
+            ranked,
+            build_entity_uniprot_frame(metadata),
+            candidate_index=candidate_index,
+        )
+
+
+def test_end_to_end_sidecars_leave_candidate_lmdb_unchanged(tmp_path):
+    candidate_path = tmp_path / "candidate.lmdb"
     write_test_lmdb(
-        train_path,
+        candidate_path,
         [
-            {"pocket": "1abc", "payload": "a"},
-            {"pocket": "2def", "payload": "b"},
+            {
+                "pocket": "1abc",
+                "payload": "a",
+                "source_split": "train",
+                "source_lmdb_key": "10",
+            },
+            {
+                "pocket": "2def",
+                "payload": "b",
+                "source_split": "valid",
+                "source_lmdb_key": "20",
+            },
             {"pocket": "not-pdb", "payload": "c"},
         ],
     )
+    before = sha256(candidate_path.read_bytes()).hexdigest()
 
     def transport(_endpoint, payload, _timeout):
         requested = payload["variables"]["ids"]
@@ -668,35 +716,59 @@ def test_end_to_end_sidecars_and_enriched_candidate_lmdb_smoke(tmp_path):
         return {"data": {"entries": entries}}
 
     result = build_uniprot_metadata_sidecars(
-        {"train": train_path},
+        candidate_path,
         output_dir=tmp_path / "metadata",
         transport=transport,
     )
 
-    assert result["lmdb_rows"] == 3
+    after = sha256(candidate_path.read_bytes()).hexdigest()
+    assert before == after
+    assert result["candidate_rows"] == 3
     assert result["unique_pdb_ids"] == 2
     assert Path(result["pdb_metadata_path"]).exists()
     assert Path(result["entity_metadata_path"]).exists()
-    assert Path(result["row_metadata_path"]).exists()
-    assert result["row_metadata"]["protein_mapping_status"].to_list() == [
-        "ok_single_uniprot",
-        "partial_uniprot_mapping",
-        "non_pdb_pocket_id",
+    assert Path(result["candidate_index_path"]).exists()
+    assert not (tmp_path / "metadata" / "pocket_uniprot_metadata.parquet").exists()
+    assert_frame_equal(
+        pl.read_parquet(result["candidate_index_path"]),
+        result["candidate_index"],
+    )
+    assert_frame_equal(
+        pl.read_parquet(result["pdb_metadata_path"]),
+        result["pdb_metadata"],
+    )
+    assert_frame_equal(
+        pl.read_parquet(result["entity_metadata_path"]),
+        result["entity_metadata"],
+    )
+
+    candidate_rows = result["candidate_index"].to_dicts()
+    assert [row["candidate_lmdb_key"] for row in candidate_rows] == ["0", "1", "2"]
+    assert candidate_rows[0]["source_lmdb_key"] == "10"
+    assert candidate_rows[1]["pdb_id"] == "2DEF"
+    assert candidate_rows[2]["pdb_id"] is None
+    assert result["candidate_library_sha256"] == candidate_rows[0][
+        "candidate_library_sha256"
     ]
 
-    enriched_path = tmp_path / "train.enriched.lmdb"
-    write_enriched_lmdb(
-        train_path,
-        result["row_metadata"],
-        enriched_path,
-        source_split="train",
+    pdb_rows = {
+        row["pdb_id"]: row for row in result["pdb_metadata"].to_dicts()
+    }
+    assert pdb_rows["1ABC"]["entry_mapping_status"] == "ok_single_uniprot"
+    assert pdb_rows["1ABC"]["selected_uniprot_accession"] == "P11111"
+    assert pdb_rows["2DEF"]["entry_mapping_status"] == "partial_uniprot_mapping"
+    assert pdb_rows["2DEF"]["selected_uniprot_accession"] is None
+    assert result["entity_metadata"].filter(pl.col("pdb_id") == "2DEF").height == 2
+
+
+def test_sidecar_build_script_has_valid_bash_syntax():
+    completed = subprocess.run(
+        ["bash", "-n", "build_uniprot_sidecars.sh"],
+        check=False,
+        capture_output=True,
+        text=True,
     )
-    records = read_lmdb_records(enriched_path)
-    assert [record["pocket"] for record in records] == [
-        "1abc",
-        "2def",
-        "not-pdb",
-    ]
-    assert records[0]["entry_uniprot_accessions"] == ["P11111"]
-    assert records[1]["selected_uniprot_accession"] is None
-    assert records[2]["protein_mapping_status"] == "non_pdb_pocket_id"
+
+    assert completed.returncode == 0, completed.stderr
+    script = Path("build_uniprot_sidecars.sh").read_text(encoding="utf-8")
+    assert "build_uniprot_metadata_sidecars" in script
