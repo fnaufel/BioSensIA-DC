@@ -43,7 +43,7 @@ Essa organização evita duplicação, mantém os arquivos LMDB compatível com 
 - Distinguir mapeamento completo, parcial, ausente e ambíguo.
 - Preencher `selected_uniprot_accession` somente em casos inequívocos.
 - Manter respostas normalizadas e brutas em *cache*.
-- Ligar cada registro LMDB aos sidecars por uma chave exata.
+- Ligar cada registro LMDB aos *sidecars* por uma chave exata.
 - Permitir que rankings preservem a identidade exata do candidato.
 - Abrir o LMDB somente para leitura durante a construção dos sidecars.
 
@@ -112,7 +112,7 @@ Para linhas mapeadas, uma chave natural prática é:
 
 ## `candidate_pocket_index.parquet`
 
-É o sidecar mais leve. Não contém nomes, organismos, listas UniProt ou estados
+É o *sidecar* mais leve. Não contém nomes, organismos, listas UniProt ou estados
 de mapeamento.
 
 | Coluna | Tipo Polars | Nulo? | Significado |
@@ -277,7 +277,7 @@ compatíveis. Entradas `graphql_error` são auditáveis, mas tentadas novamente
 por padrão. HTTP 413/414 causa divisão recursiva do lote. Erros de rede, HTTP
 429 e 5xx usam tentativas com *backoff* exponencial.
 
-## Construção dos sidecars
+## Construção dos *sidecars*
 
 ### API Python
 
@@ -448,7 +448,7 @@ compatibilidade; a proveniência exata só é garantida quando fornecido.
 
 ## Invariantes testados
 
-1. O LMDB não é modificado pela construção dos sidecars.
+1. O LMDB não é modificado pela construção dos *sidecars*.
 2. `raw_pocket_id` preserva `record["pocket"]`.
 3. `pdb_id` só existe para códigos PDB clássicos válidos.
 4. A chave LMDB do candidato é preservada como texto.

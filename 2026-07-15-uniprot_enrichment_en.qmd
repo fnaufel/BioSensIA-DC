@@ -1,0 +1,507 @@
+---
+title: "UniProt Metadata for the BioSensIA-DC Pocket Library"
+subtitle: "Specification, data model, design decisions, and usage guide"
+date: 2026-07-15
+lang: en
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+execute:
+  enabled: false
+---
+
+## Executive summary
+
+BioSensIA-DC uses an LMDB library of candidate pockets for target fishing. The
+original identifier remains in `record["pocket"]` and is not replaced by a
+UniProt accession.
+
+The enrichment implemented here **does not identify the protein that
+biologically contains the pocket**. Starting from a PDB identifier, it
+retrieves the protein polymer entities present in the PDB entry and their
+UniProt mappings reported by the RCSB. It does not claim that every returned
+protein contains, contacts, or is biologically responsible for the pocket.
+
+The implementation does not write UniProt metadata into the LMDB files. It
+produces:
+
+1. `candidate_pocket_index.parquet`: a lightweight, exact candidate index;
+2. `pdb_uniprot_metadata.parquet`: one row per PDB entry;
+3. `pdb_entity_uniprot_metadata.parquet`: a normalized relation among PDB
+   entries, protein entities, and UniProt mappings.
+
+This organization avoids duplication, keeps the LMDB files compatible with
+DrugCLIP, and allows annotations to be updated without rebuilding atoms and
+coordinates.
+
+## Implemented specification
+
+- Preserve `record["pocket"]` exactly as the original PDB-like identifier.
+- Do not create an “enriched” LMDB containing protein metadata.
+- Query the proteins present in the PDB entry.
+- Use the RCSB GraphQL API and record the query that was used.
+- Preserve entity, chain, organism, isoform, provenance, and coverage data.
+- Distinguish complete, partial, missing, and ambiguous mappings.
+- Populate `selected_uniprot_accession` only in unambiguous cases.
+- Cache both normalized and raw responses.
+- Link each LMDB record to the sidecars through an exact key.
+- Allow rankings to preserve the exact candidate identity.
+- Open the LMDB read-only while building the sidecars.
+
+## Design principle
+
+The LMDB file is the inference library. It contains `pocket`, `pocket_atoms`,
+`pocket_coordinates`, and provenance fields already produced when assembling
+the library, such as `source_split`, `source_lmdb_key`, and
+`pocket_geometry_hash`.
+
+Protein metadata is relational and is stored in Parquet. It can change when
+the RCSB corrects an entry, the SIFTS/UniProt mapping is updated, or the
+normalization evolves. None of these changes should require the LMDB to be
+re-encoded.
+
+## Architecture
+
+```{mermaid}
+flowchart LR
+    LMDB["candidate_pockets.lmdb<br/>key + record['pocket']"]
+    IDX["candidate_pocket_index.parquet<br/>one row per candidate"]
+    PDB["pdb_uniprot_metadata.parquet<br/>one row per PDB"]
+    ENT["pdb_entity_uniprot_metadata.parquet<br/>entity × mapping"]
+
+    LMDB -- "candidate_lmdb_key<br/>+ candidate_library_sha256" --> IDX
+    IDX -- "pdb_id" --> PDB
+    PDB -- "pdb_id" --> ENT
+```
+
+There are two distinct identities:
+
+- **physical candidate**: an LMDB key within a specific library;
+- **structural entry**: the canonical uppercase PDB identifier.
+
+Several candidates may share the same `pdb_id`. This occurs with duplicates
+across splits or different geometries for the same PDB entry. Therefore,
+`pdb_id` does not uniquely identify a candidate.
+
+## Keys and cardinalities
+
+### Candidate
+
+The global logical key is:
+
+```text
+(candidate_library_sha256, candidate_lmdb_key)
+```
+
+`candidate_lmdb_key` is unique only within a library. The SHA-256 digest
+prevents the key `"42"` in one library from being confused with the same key
+in another library.
+
+### PDB entry
+
+`pdb_uniprot_metadata.parquet` uses `pdb_id` as its primary key.
+
+### Entity and mapping
+
+`pdb_entity_uniprot_metadata.parquet` has one row per protein entity and
+mapping. An entity with two accessions generates two rows. An entity without
+an accession also generates a row, with `uniprot_accession = null`, so that
+partial and missing mappings remain auditable.
+
+For mapped rows, a practical natural key is:
+
+```text
+(pdb_id, rcsb_polymer_entity_id, uniprot_accession,
+ uniprot_isoform, mapping_provenance)
+```
+
+## `candidate_pocket_index.parquet`
+
+This is the lightest sidecar. It does not contain names, organisms, UniProt
+lists, or mapping statuses.
+
+| Column | Polars type | Nullable? | Meaning |
+|---|---|---:|---|
+| `candidate_library_sha256` | `String` | no | SHA-256 of the ordered logical stream of LMDB keys and values. |
+| `candidate_library_entries` | `Int64` | no | Total number of records in the library. |
+| `candidate_lmdb_key` | `String` | no | Exact key used to retrieve the LMDB record. |
+| `source_split` | `String` | yes | Source DrugCLIP split, when available. |
+| `source_lmdb_key` | `String` | yes | Key in the source LMDB. |
+| `raw_pocket_id` | `String` | no | Unmodified copy of `record["pocket"]`. |
+| `pdb_id` | `String` | yes | Uppercase classic PDB identifier; null for non-PDB identifiers. |
+| `pocket_geometry_hash` | `String` | yes | Geometry hash, when available. |
+
+### Logical digest
+
+The digest is not computed from the physical pages of the file. It traverses
+the keys in order and incorporates:
+
+1. key length;
+2. key bytes;
+3. value length;
+4. value bytes.
+
+Logically equivalent LMDB files have the same digest even when they use
+different `map_size` values or page layouts. Changing a key or value changes
+the digest.
+
+The digest and entry count appear in every row. Parquet dictionary encoding
+makes this repetition inexpensive and allows an isolated row to continue
+identifying its library.
+
+## `pdb_uniprot_metadata.parquet`
+
+| Column | Polars type | Meaning |
+|---|---|---|
+| `pdb_id` | `String` | Canonical PDB identifier and primary key. |
+| `all_uniprot_accessions` | `List(String)` | Distinct accessions found. |
+| `all_uniprot_isoforms` | `List(String)` | Isoforms reported by the RCSB. |
+| `selected_uniprot_accession` | `String` | Accession selected only in an unambiguous case. |
+| `all_protein_names` | `List(String)` | Descriptions of the protein entities. |
+| `all_organisms` | `List(String)` | Scientific organism names. |
+| `all_organism_taxonomy_ids` | `List(String)` | NCBI taxonomy identifiers. |
+| `rcsb_polymer_entity_ids` | `List(String)` | Protein entity identifiers. |
+| `protein_entity_count` | `Int64` | Number of protein entities. |
+| `mapped_protein_entity_count` | `Int64` | Entities with at least one UniProt accession. |
+| `entry_mapping_status` | `String` | Consolidated entry mapping status. |
+| `graphql_status` | `String` | GraphQL response status. |
+| `retrieved_at` | `String` | UTC retrieval date and time. |
+| `mapping_method` | `String` | Method, currently `rcsb_graphql_entry_level`. |
+| `mapping_source` | `String` | RCSB PDB GraphQL API. |
+| `query_sha256` | `String` | SHA-256 of the exact query text. |
+| `metadata_warnings` | `List(String)` | Warnings and auditable conditions. |
+
+### Selecting one accession
+
+`selected_uniprot_accession` is populated only when:
+
+1. exactly one distinct UniProt accession exists; and
+2. the status is `ok_single_uniprot` or
+   `ok_multiple_entities_same_uniprot`.
+
+It remains null for a partial mapping, even if only one accession was found,
+because the unmapped entity may represent another protein.
+
+## `pdb_entity_uniprot_metadata.parquet`
+
+| Column | Polars type | Meaning |
+|---|---|---|
+| `pdb_id` | `String` | PDB entry. |
+| `rcsb_polymer_entity_id` | `String` | Entity identifier within the entry. |
+| `rcsb_id` | `String` | Composite identifier supplied by the RCSB. |
+| `polymer_type` | `String` | Normalized polymer type or PDBx fallback. |
+| `entity_description` | `String` | Entity name or description. |
+| `label_asym_ids` | `List(String)` | Chains in the `label_asym_id` namespace. |
+| `auth_asym_ids` | `List(String)` | Author-assigned chain identifiers. |
+| `organism_names` | `List(String)` | Organisms associated with the entity. |
+| `organism_taxonomy_ids` | `List(String)` | NCBI taxonomy identifiers. |
+| `uniprot_accession` | `String` | UniProt accession; null when unmapped. |
+| `uniprot_isoform` | `String` | Isoform, when reported. |
+| `mapping_provenance` | `String` | Provenance, for example SIFTS. |
+| `entity_sequence_coverage` | `Float64` | Entity-sequence coverage. |
+| `reference_sequence_coverage` | `Float64` | Reference-sequence coverage. |
+| `entry_mapping_status` | `String` | Consolidated entry status. |
+| `retrieved_at` | `String` | Retrieval time. |
+
+Chains, organisms, and mappings remain associated with the correct entity.
+This avoids the Cartesian product that would result from flattening everything
+into one row.
+
+## Mapping statuses
+
+| Status | Condition |
+|---|---|
+| `no_protein_entity` | No protein polymer entity is present. |
+| `no_uniprot_mapping` | Proteins are present, but none has a UniProt accession. |
+| `partial_uniprot_mapping` | Only some entities have a mapping. |
+| `ok_single_uniprot` | One entity maps to a single accession. |
+| `ok_multiple_entities_same_uniprot` | All entities map to the same accession. |
+| `ambiguous_multiple_uniprot` | The complete mapping contains several accessions. |
+| `pdb_not_found` | The RCSB did not return the requested entry. |
+| `graphql_error` | The query failed or produced no usable data. |
+
+`partial_uniprot_mapping` takes precedence over an apparently unique
+selection. An entry with two entities, one mapped to `P11111` and one
+unmapped, is partial and does not select `P11111`.
+
+## GraphQL query
+
+```graphql
+query EntryProteinMappings($ids: [String!]!) {
+  entries(entry_ids: $ids) {
+    rcsb_id
+    polymer_entities {
+      rcsb_id
+      entity_poly {
+        type
+        rcsb_entity_polymer_type
+      }
+      rcsb_polymer_entity {
+        pdbx_description
+      }
+      rcsb_polymer_entity_container_identifiers {
+        entity_id
+        asym_ids
+        auth_asym_ids
+        reference_sequence_identifiers {
+          database_name
+          database_accession
+          database_isoform
+          provenance_source
+          entity_sequence_coverage
+          reference_sequence_coverage
+        }
+      }
+      rcsb_entity_source_organism {
+        ncbi_scientific_name
+        ncbi_taxonomy_id
+      }
+    }
+  }
+}
+```
+
+Only UniProt references are included in the mapping. Non-protein entities are
+ignored. Responses containing both data and errors are accepted as partial;
+the errors are preserved in `metadata_warnings`.
+
+## Cache and reproducibility
+
+By default:
+
+```text
+<output_dir>/pdb_graphql_cache/
+├── 1ABC.json
+├── 2DEF.json
+└── _raw/
+    └── <timestamp>_<digest>.json
+```
+
+The per-PDB files contain the normalized form. `_raw` contains the raw
+response, query, endpoint, requested identifiers, and retrieval time.
+
+A cache entry is reused only when `cache_schema_version` and `query_sha256`
+are compatible. `graphql_error` entries remain auditable but are retried by
+default. HTTP 413/414 responses trigger recursive batch splitting. Network
+errors, HTTP 429, and 5xx responses use retries with exponential backoff.
+
+## Building the sidecars
+
+### Python API
+
+```python
+from biosensia_uniprot_enrichment import build_uniprot_metadata_sidecars
+
+result = build_uniprot_metadata_sidecars(
+    "data/candidate_pockets.lmdb",
+    output_dir="data/uniprot",
+    cache_dir="data/uniprot/pdb_graphql_cache",
+    batch_size=100,
+    refresh=False,
+    show_progress=True,
+    ca_bundle="/optional/path/to/ca-bundle.pem",
+)
+```
+
+Output:
+
+```text
+data/uniprot/
+├── candidate_pocket_index.parquet
+├── pdb_uniprot_metadata.parquet
+├── pdb_entity_uniprot_metadata.parquet
+└── pdb_graphql_cache/
+```
+
+The return value contains the three DataFrames and their paths,
+`candidate_rows`, `candidate_library_sha256`, `unique_pdb_ids`,
+`cache_dir`, and `candidate_lmdb_path`. The LMDB is opened read-only. Before
+processing begins, the function prints the source library. With
+`show_progress=True`, it displays progress bars for candidate indexing and
+GraphQL batches not satisfied by the cache.
+
+### Bash script
+
+```bash
+./build_uniprot_sidecars.sh \
+  data/candidate_pockets.lmdb \
+  data/uniprot \
+  data/uniprot/pdb_graphql_cache
+```
+
+To change the batch size and force a refresh:
+
+```bash
+BATCH_SIZE=50 REFRESH=true \
+  ./build_uniprot_sidecars.sh data/candidate_pockets.lmdb data/uniprot
+```
+
+```bash
+./build_uniprot_sidecars.sh --help
+```
+
+The script uses `uv run --no-sync` so that it does not remove the overlaid
+Uni-Core installation. It attempts to add the installed Certifi bundle to
+Python's trust store automatically. On a node that uses an institutional HTTPS
+proxy, supply the PEM bundle specified by the cluster administrator:
+
+```bash
+CA_BUNDLE=/path/to/sagres-ca.pem \
+  ./build_uniprot_sidecars.sh data/candidate_pockets.lmdb data/uniprot
+```
+
+TLS verification must not be disabled. Cache files with a `graphql_error`
+status are retried automatically on the next run; `REFRESH=true` is not needed
+solely to recover from this failure.
+
+## Joins with Polars
+
+### Candidate to PDB summary
+
+```python
+import polars as pl
+
+candidates = pl.read_parquet(
+    "data/uniprot/candidate_pocket_index.parquet"
+)
+pdb = pl.read_parquet(
+    "data/uniprot/pdb_uniprot_metadata.parquet"
+)
+
+candidates_with_pdb = candidates.join(
+    pdb,
+    on="pdb_id",
+    how="left",
+    validate="m:1",
+)
+```
+
+### Candidate to entities and accessions
+
+```python
+entities = pl.read_parquet(
+    "data/uniprot/pdb_entity_uniprot_metadata.parquet"
+)
+
+candidate_entity_uniprot = candidates.join(
+    entities,
+    on="pdb_id",
+    how="left",
+)
+```
+
+This is a many-to-many join: one PDB may have several relation rows, and
+several candidates may refer to the same PDB.
+
+### Exact LMDB record
+
+```python
+row = candidates.filter(
+    pl.col("candidate_lmdb_key") == "42"
+).row(0, named=True)
+
+lmdb_key = row["candidate_lmdb_key"].encode("ascii")
+expected_digest = row["candidate_library_sha256"]
+```
+
+Do not transport `candidate_lmdb_key` across libraries without
+`candidate_library_sha256`.
+
+## Aggregation by protein
+
+`aggregate_pocket_scores_by_protein` uses the highest score among the pockets
+supporting each UniProt accession:
+
+```python
+from biosensia_uniprot_enrichment import (
+    aggregate_pocket_scores_by_protein,
+)
+
+protein_ranking = aggregate_pocket_scores_by_protein(
+    ranked_pockets,
+    entity_metadata,
+    candidate_index=candidate_index,
+    ambiguity_mode="strict",
+)
+```
+
+When `candidate_index` is supplied, each ranked row must contain
+`candidate_lmdb_key`. The function validates missing or null keys, uniqueness,
+a single library digest, the declared entry count, resolution of every ranked
+key, and equality between `pocket` and `raw_pocket_id`.
+
+The index is authoritative for `pdb_id`, `source_split`,
+`source_lmdb_key`, and `pocket_geometry_hash`.
+
+### Modes
+
+- `strict`: uses only `ok_single_uniprot` and
+  `ok_multiple_entities_same_uniprot`;
+- `exploratory`: assigns the score to every reported accession and flags
+  ambiguous or partial support.
+
+The result includes the best score, rank, best PDB and pocket,
+`best_candidate_library_sha256`, `best_candidate_lmdb_key`, provenance,
+support and PDB counts, mapping statuses, and JSON for every supporting hit.
+
+### Legacy TSV limitation
+
+The traditional `ranked_pockets.txt` contains only `pocket` and score. Because
+duplicate names exist, it cannot safely reconstruct the LMDB key.
+
+For an exact join, the step producing the ranked DataFrame must preserve
+`candidate_lmdb_key`. Without it, annotation by `pdb_id` remains possible, but
+duplicate geometries cannot be distinguished. `candidate_index` remains
+optional for compatibility; exact provenance is guaranteed only when it is
+provided.
+
+## Tested invariants
+
+1. The sidecar build does not modify the LMDB.
+2. `raw_pocket_id` preserves `record["pocket"]`.
+3. `pdb_id` exists only for valid classic PDB identifiers.
+4. The candidate LMDB key is preserved as text.
+5. The digest is stable across equivalent LMDB layouts.
+6. Changing a logical value changes the digest.
+7. The index does not repeat UniProt metadata.
+8. Unmapped entities remain in the normalized table.
+9. Partial mappings do not select an accession automatically.
+10. Strict aggregation excludes partial or ambiguous support.
+11. The exact join fails for a missing key or incompatible pocket.
+
+## Validation commands
+
+```bash
+uv run --no-sync pytest tests/test_uniprot_enrichment.py -q
+uv run --no-sync pytest
+bash -n build_uniprot_sidecars.sh
+./build_uniprot_sidecars.sh --help
+quarto render 2026-07-15-uniprot_enrichment_en.qmd
+```
+
+## Deliberate decisions
+
+### Do not replace `record["pocket"]`
+
+The current identifier is part of the DrugCLIP integration and legacy results.
+Replacing it would break compatibility and hide real ambiguities.
+
+### Do not select the first accession
+
+API ordering is not evidence that a protein biologically owns the pocket.
+Automatic selection occurs only when the complete mapping is unambiguously
+unique.
+
+### Do not repeat metadata per candidate
+
+A PDB entry may appear many times. Repeating names, organisms, accessions,
+chains, and warnings increases the LMDB size and makes consistent updates more
+difficult.
+
+### Do not infer geometric association with chains
+
+The metadata describes the PDB entry. Associating pocket coordinates with
+specific chains would require a separate geometric procedure with its own
+tolerances, symmetry handling, and validation.

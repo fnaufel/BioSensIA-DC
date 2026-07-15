@@ -39,3 +39,7 @@ external/DrugCLIP/tsb_dir/
 /scratch/train.parquet
 /scratch/valid.parquet
 /benchmar_audit_files/
+/2026-07-14-uniprot_enrichment.html
+/2026-07-14-uniprot_enrichment_files/
+/data/pdb_graphql_cache/
+/data/*.parquet
