@@ -1,3 +1,15 @@
+---
+title: "Examining the sidecars"
+date: 2026-07-17
+lang: en
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+    number-depth: 2
+---
+
 # Examining the sidecars
 
 
@@ -25,6 +37,12 @@ df_candidates.glimpse()
 
 ### SHA256
 
+::: {.callout-note}
+
+This is the digest for this library. All lines have the same value.
+
+:::
+
 ```{python}
 df_candidates.select(
     pl.col('candidate_library_sha256').n_unique()
@@ -33,6 +51,12 @@ df_candidates.select(
 
 ### Entries
 
+::: {.callout-note}
+
+This is the number of entries in this library. All lines have the same value.
+
+:::
+
 ```{python}
 df_candidates.select(
     pl.col('candidate_library_entries').n_unique()
@@ -40,6 +64,12 @@ df_candidates.select(
 ```
 
 ### Source split
+
+::: {.callout-note}
+
+Each row comes from the train set or from the validation set.
+
+:::
 
 ```{python}
 df_candidates.select(
@@ -50,14 +80,20 @@ df_candidates.select(
 
 ### Source LMDB keys
 
+::: {.callout-note}
+
+There are duplicate LMDB keys, but only because one is in the train split and the other in the validation split.
+
+Except for the validation set (where keys start from 1 again), the source key and the candidate key are the same.
+
+:::
+
 ```{python}
 df_candidates.select(
     pl.col('source_lmdb_key').null_count().alias('null'),
     pl.col('source_lmdb_key').n_unique(),
 )
 ```
-
-There are duplicate keys, but only because one is in the train split and the other in the validation split.
 
 ```{python}
 df_candidates.select(
@@ -67,10 +103,14 @@ df_candidates.select(
 ).unnest()
 ```
 
-Except for the validation set, the source key and the candidate key are the same.
-
 
 ### PDB IDs (normalized to uppercase)
+
+::: {.callout-note}
+
+We already knew there were duplicated PDB ids.
+
+:::
 
 ```{python}
 df_candidates.select(
@@ -80,10 +120,14 @@ df_candidates.select(
 )
 ```
 
-We already knew there were duplicated PDB ids.
-
 
 ### Pocket geometry hash
+
+::: {.callout-note}
+
+There are duplicated hashes in the train split!
+
+:::
 
 ```{python}
 df_candidates.group_by('source_split').agg(
@@ -91,8 +135,6 @@ df_candidates.group_by('source_split').agg(
     pl.col('pocket_geometry_hash').n_unique().alias('unique'),
 )
 ```
-
-There are duplicated hashes in the train split!
 
 ```{python}
 df_dup = df_candidates.filter(pl.col("source_split") == "train").select(
@@ -113,16 +155,121 @@ df_candidates.filter(
 ).agg(pl.col('source_lmdb_key'))
 ```
 
-Not only are PDB ids duplicated, but the pocket geometries are too. What is different about these duplicates? Only the LMDB keys. Maybe different ligands. Will check after joining.
+::: {.callout-note}
+
+Not only are PDB ids duplicated, but some pocket geometries are too. What is different about these duplicates? Only the LMDB keys. Maybe different ligands. Will check after joining.
+
+For each PDB id that has more than one pocket geometry, are all these geometries the same?
+
+:::
+
+```{python}
+df_pdb_geometry_counts = (
+    df_candidates.filter(pl.col('pdb_id').is_not_null())
+    .group_by('pdb_id')
+    .agg(
+        pl.len().alias('candidate_rows'),
+        pl.col('pocket_geometry_hash')
+        .drop_nulls()
+        .n_unique()
+        .alias('unique_pocket_geometries'),
+        pl.col('pocket_geometry_hash').null_count().alias('null_geometry_hashes'),
+    )
+    .filter(pl.col('candidate_rows') > 1)
+)
+
+df_repeated_pdb_geometry_summary = df_pdb_geometry_counts.select(
+    (
+        (pl.col('unique_pocket_geometries') == 1)
+        & (pl.col('null_geometry_hashes') == 0)
+    )
+    .all()
+    .alias('all_repeated_pdb_ids_have_identical_geometries'),
+    pl.len().alias('pdb_ids_with_repeated_pockets'),
+    (
+        (pl.col('unique_pocket_geometries') == 1)
+        & (pl.col('null_geometry_hashes') == 0)
+    )
+    .sum()
+    .alias('pdb_ids_with_identical_geometries'),
+    (pl.col('unique_pocket_geometries') > 1)
+    .sum()
+    .alias('pdb_ids_with_distinct_geometries'),
+    (pl.col('null_geometry_hashes') > 0)
+    .sum()
+    .alias('pdb_ids_with_missing_geometry_hashes'),
+)
+
+df_repeated_pdb_geometry_summary.select(
+    pl.all().cast(pl.String)
+).transpose(
+    include_header=True,
+    header_name='metric',
+    column_names=['value'],
+)
+```
+
+
+## UniProt metadata
+
+```{python}
+df_pdb = pl.read_parquet(
+    "data/pdb_uniprot_metadata.parquet"
+)
+```
+
+### Glimpse
+
+```{python}
+df_pdb.glimpse()
+```
+
+::: {.callout-note}
+
+- **`pdb_id`** — Canonical four-character PDB entry identifier, normalized to uppercase (for example, `1ABC`). It is the primary key of this sidecar: each value occurs at most once and links to `candidate_pocket_index.parquet` through its `pdb_id` column.
+
+- **`all_uniprot_accessions`** — List of distinct UniProt accessions mapped to any protein polymer entity in the PDB entry. An empty list means that no protein entity has a UniProt mapping; one value means that all mapped entities collectively identify one accession; multiple values mean that the entry contains mappings to more than one accession. The list alone does not establish that the mapping is complete—consult `entry_mapping_status`.
+
+- **`all_uniprot_isoforms`** — List of distinct UniProt isoform identifiers reported by RCSB for the entry. It is empty when RCSB reports no isoform-specific identifiers, even if `all_uniprot_accessions` is populated; one or more values indicate isoform-specific mappings.
+
+- **`selected_uniprot_accession`** — The single accession considered safe for entry-level selection, or null when no unambiguous accession can be selected. It is populated only when exactly one distinct accession exists and `entry_mapping_status` is `ok_single_uniprot` or `ok_multiple_entities_same_uniprot`. In particular, it remains null for partial mappings because an unmapped protein entity could correspond to another accession.
+
+- **`all_protein_names`** — List of distinct RCSB descriptions for the protein polymer entities in the entry. An empty list means that there is no protein entity or that no protein descriptions were available; multiple values represent distinct descriptions within the same PDB entry.
+
+- **`all_organisms`** — List of distinct scientific organism names associated with the entry's protein entities. It may be empty when source-organism metadata is unavailable, contain one value for a single reported source organism, or contain multiple values for entries involving proteins from multiple organisms.
+
+- **`all_organism_taxonomy_ids`** — List of distinct NCBI taxonomy identifiers corresponding to the protein source organisms. Values are stored as strings. An empty list means that no taxonomy identifier was reported; multiple values indicate multiple reported taxa.
+
+- **`rcsb_polymer_entity_ids`** — List of the RCSB entity identifiers for all protein polymer entities retained from the entry. These identifiers are local to a PDB entry, commonly values such as `1`, `2`, and so on. An empty list corresponds to `no_protein_entity`; multiple values mean that the entry contains multiple protein entities. Entity-level details are available in `pdb_entity_uniprot_metadata.parquet` by joining on `pdb_id` and the entity identifier.
+
+- **`protein_entity_count`** — Number of protein polymer entities found in the PDB entry. `0` means that no protein entity was found; `1` means one protein entity; values greater than `1` indicate a multi-entity protein entry. Non-protein polymers and other components are not counted.
+
+- **`mapped_protein_entity_count`** — Number of protein entities having at least one UniProt accession. It ranges from `0` to `protein_entity_count`: `0` means no protein entity is mapped, equality with `protein_entity_count` means complete entity coverage, and an intermediate value means a partial mapping.
+
+- **`entry_mapping_status`** — Consolidated interpretation of mapping completeness and ambiguity. Possible values are: `no_protein_entity` (no protein polymer entity was found); `no_uniprot_mapping` (protein entities exist, but none maps to UniProt); `partial_uniprot_mapping` (only some protein entities map to UniProt); `ok_single_uniprot` (one protein entity maps unambiguously to one accession); `ok_multiple_entities_same_uniprot` (all protein entities map to the same single accession); `ambiguous_multiple_uniprot` (the complete mapping contains multiple accessions); `pdb_not_found` (RCSB returned no entry for the requested PDB ID); or `graphql_error` (the request failed or returned no usable data).
+
+- **`graphql_status`** — Outcome of the GraphQL request independently of the biological mapping status. `ok` means a usable response was obtained (and is also used for a valid negative result such as `pdb_not_found`); `partial_error` means usable entry data was returned together with GraphQL errors, which are retained in `metadata_warnings`; `error` means the request failed and no usable entry data was obtained.
+
+- **`retrieved_at`** — UTC timestamp, in ISO 8601 text form, recording when the cached RCSB result was retrieved or the failed lookup was recorded. Different rows may have different timestamps because cache entries can be created or refreshed at different times.
+
+- **`mapping_method`** — Identifier of the normalization and mapping procedure. The current value is `rcsb_graphql_entry_level`, meaning that mappings were collected at PDB-entry level through the RCSB GraphQL API and then summarized into one row per PDB ID.
+
+- **`mapping_source`** — Human-readable provenance of the mapping data. The current value is `RCSB PDB Data API GraphQL`.
+
+- **`query_sha256`** — SHA-256 digest of the exact GraphQL query text used to retrieve the metadata. Rows produced with the same query have the same 64-character hexadecimal value; a different value identifies a changed query and therefore a potentially different data-extraction contract.
+
+- **`metadata_warnings`** — List of warnings and auditable exceptional conditions encountered for the entry. An empty list means that no warning was recorded. A nonempty list may describe partial GraphQL errors, incomplete UniProt coverage, network or TLS failures, missing entries, or other conditions; inspect the messages together with `entry_mapping_status` and `graphql_status` rather than treating every warning as a fatal error.
+
+:::
+
+```{python}
+df_pdb
+```
 
 ## Continue from here
 
 ```{python}
 #| eval: false
-df_pdb = pl.read_parquet(
-    "data/uniprot/pdb_uniprot_metadata.parquet"
-)
-
 df_candidates_with_pdb = df_candidates.join(
     df_pdb,
     on="pdb_id",
