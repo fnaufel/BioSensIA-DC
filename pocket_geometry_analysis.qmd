@@ -274,8 +274,24 @@ that a particular LMDB record belongs to those chains.
 For protein assignment, an LMDB pocket does not have to equal the reference
 pocket. It is enough for its atoms to be found in the deposited protein
 structure. The function below matches every LMDB coordinate to the nearest
-`ATOM` coordinate in `<pdb_id>_protein.pdb`. It also checks the atom label and
-returns the author chain IDs of the matched atoms.
+`ATOM` coordinate in `<pdb_id>_protein.pdb`. It also checks the chemical
+element and returns the author chain IDs of the matched atoms.
+
+There is an important representation inconsistency in the supplied DrugCLIP
+data. `dict_pkt.txt` contains the element tokens `C`, `N`, `O`, `S`, and `H`,
+but the actual `pocket_atoms` arrays contain PDB atom names such as `CA`, `CB`,
+`CG`, `NZ`, and `OD1`. DrugCLIP's local PDB writer also reads `atom_name` into
+`pocket_atoms`. The audit therefore reports two separate quantities:
+
+- direct agreement with the stored PDB atom name, useful for diagnosing the
+  files as they actually exist;
+- chemical-element agreement after normalizing the LMDB label and reading PDB
+  columns 77–78, which is the biologically relevant label check and is
+  consistent with `dict_pkt.txt`.
+
+The PDB element field is authoritative when present. A fallback infers the
+element from the aligned four-character atom-name field when columns 77–78 are
+blank.
 
 PDB coordinates are printed to three decimal places. A 0.002 Å Euclidean
 tolerance safely covers that rounding while remaining far below ordinary
@@ -296,9 +312,10 @@ def find_protein_pdb(pdb_id: str) -> Path | None:
 
 def read_protein_atoms(
     path: Path,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     coordinates: list[tuple[float, float, float]] = []
     atom_names: list[str] = []
+    elements: list[str] = []
     chain_ids: list[str] = []
 
     with path.open(encoding="utf-8", errors="replace") as handle:
@@ -314,7 +331,12 @@ def read_protein_atoms(
             except ValueError:
                 continue
             coordinates.append(xyz)
-            atom_names.append(line[12:16].strip())
+            raw_atom_name = line[12:16]
+            atom_name = raw_atom_name.strip()
+            atom_names.append(atom_name)
+            elements.append(
+                (line[76:78].strip() or infer_pdb_element(raw_atom_name)).upper()
+            )
             chain_ids.append(line[21].strip() or "?")
 
     if not coordinates:
@@ -322,8 +344,45 @@ def read_protein_atoms(
     return (
         np.asarray(coordinates, dtype=np.float64),
         np.asarray(atom_names),
+        np.asarray(elements),
         np.asarray(chain_ids),
     )
+
+
+TWO_LETTER_ELEMENTS = {
+    "BR", "CA", "CL", "CO", "CU", "FE", "MG", "MN", "MO", "NA", "NI",
+    "SE", "ZN",
+}
+
+
+def infer_pdb_element(raw_atom_name: str) -> str:
+    """Infer an element from the aligned PDB atom-name field."""
+    if len(raw_atom_name) != 4:
+        raw_atom_name = f"{raw_atom_name:>4}"[-4:]
+    stripped = raw_atom_name.strip()
+    if not stripped:
+        raise ValueError("Cannot infer an element from an empty atom name")
+
+    # A leading space or digit is the usual one-letter-element layout, e.g.
+    # " CA " (alpha carbon) or "1HG2" (hydrogen). A left-justified name can
+    # represent a two-letter element, e.g. "ZN  ".
+    if raw_atom_name[0].isspace() or raw_atom_name[0].isdigit():
+        letters = "".join(character for character in stripped if character.isalpha())
+        return letters[0].upper()
+    candidate = "".join(
+        character for character in stripped[:2] if character.isalpha()
+    ).upper()
+    return candidate if candidate in TWO_LETTER_ELEMENTS else stripped[0].upper()
+
+
+def element_from_lmdb_label(label: str) -> str:
+    """Normalize a stored element token or protein PDB atom name."""
+    letters = "".join(character for character in str(label) if character.isalpha())
+    if not letters:
+        raise ValueError(f"Cannot infer an element from LMDB label {label!r}")
+    # LMDB protein labels such as CA, NZ, OD1, and SD are PDB atom names, so
+    # their first letter is the element. This also leaves C/N/O/S/H unchanged.
+    return letters[0].upper()
 
 
 def nearest_reference_atoms(
@@ -366,19 +425,30 @@ def audit_record_against_protein(
             "protein_match_status": "protein_pdb_missing",
         }
 
-    reference_xyz, reference_atoms, reference_chains = read_protein_atoms(
-        protein_path
-    )
+    (
+        reference_xyz,
+        reference_atom_names,
+        reference_elements,
+        reference_chains,
+    ) = read_protein_atoms(protein_path)
     query_xyz = np.asarray(record["pocket_coordinates"], dtype=np.float64)
-    query_atoms = np.asarray([str(x).strip() for x in record["pocket_atoms"]])
+    query_labels = np.asarray([str(x).strip() for x in record["pocket_atoms"]])
+    query_elements = np.asarray(
+        [element_from_lmdb_label(label) for label in query_labels]
+    )
     distances, nearest = nearest_reference_atoms(query_xyz, reference_xyz)
     matched = distances <= tolerance
     matched_count = int(matched.sum())
-    labels_equal = query_atoms[matched] == reference_atoms[nearest[matched]]
+    atom_names_equal = (
+        query_labels[matched] == reference_atom_names[nearest[matched]]
+    )
+    elements_equal = (
+        query_elements[matched] == reference_elements[nearest[matched]]
+    )
     chains = sorted(set(reference_chains[nearest[matched]].tolist()))
 
-    if matched_count == len(query_xyz) and bool(labels_equal.all()):
-        status = "all_atoms_and_labels_match"
+    if matched_count == len(query_xyz) and bool(elements_equal.all()):
+        status = "all_coordinates_and_elements_match"
     elif matched_count == len(query_xyz):
         status = "all_coordinates_match"
     elif matched_count:
@@ -394,8 +464,11 @@ def audit_record_against_protein(
         "lmdb_atom_count": len(query_xyz),
         "matched_atom_count": matched_count,
         "matched_atom_fraction": matched_count / len(query_xyz),
-        "matched_label_fraction": (
-            float(labels_equal.mean()) if matched_count else None
+        "matched_atom_name_fraction": (
+            float(atom_names_equal.mean()) if matched_count else None
+        ),
+        "matched_element_fraction": (
+            float(elements_equal.mean()) if matched_count else None
         ),
         "maximum_nearest_distance_A": float(distances.max()),
         "matched_auth_asym_ids": chains,
@@ -483,7 +556,7 @@ spatial_audit.group_by("protein_match_status").agg(
 ```
 
 With the current files, this purposive sample contains 40 records: 9 have
-complete coordinate and atom-label matches, 30 have no coordinate match, and 1
+complete coordinate and element matches, 30 have no coordinate match, and 1
 has a partial match (82.90% of its atoms). This is not a population estimate—the
 sample intentionally targets PDB IDs with four distinct geometries—but it
 directly demonstrates that records sharing one PDB ID can have different
@@ -510,7 +583,7 @@ entity_chains = (
 validated_protein_mappings = (
     spatial_audit.filter(
         pl.col("protein_match_status").is_in(
-            ["all_atoms_and_labels_match", "all_coordinates_match"]
+            ["all_coordinates_and_elements_match", "all_coordinates_match"]
         )
     )
     .explode("matched_auth_asym_ids")
@@ -561,7 +634,8 @@ Suggested columns are:
 
 - `protein_match_status`;
 - `matched_atom_fraction`;
-- `matched_label_fraction`;
+- `matched_atom_name_fraction` (diagnostic only);
+- `matched_element_fraction`;
 - `maximum_nearest_distance_A`;
 - `matched_auth_asym_ids`;
 - `rcsb_polymer_entity_ids`;
