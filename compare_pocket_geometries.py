@@ -20,6 +20,7 @@ from typing import Any
 import lmdb
 import numpy as np
 import polars as pl
+from tqdm.auto import tqdm
 
 
 DEFAULT_LMDBS = (
@@ -32,14 +33,23 @@ DEFAULT_OUTPUT = Path("data/pocket_geometry_comparison.parquet")
 DEFAULT_DUPLICATES_OUTPUT = Path("data/pocket_geometry_duplicates.parquet")
 
 
-def iter_lmdb(path: Path) -> Iterator[tuple[str, Mapping[str, Any]]]:
+def iter_lmdb(
+    path: Path, *, show_progress: bool = True
+) -> Iterator[tuple[str, Mapping[str, Any]]]:
     env = lmdb.open(
         str(path), subdir=False, readonly=True, lock=False, readahead=False,
         meminit=False, max_readers=256,
     )
     try:
         with env.begin() as transaction:
-            for key, value in transaction.cursor():
+            records = tqdm(
+                transaction.cursor(),
+                total=transaction.stat()["entries"],
+                desc=f"Comparing {path.name}",
+                unit="record",
+                disable=not show_progress,
+            )
+            for key, value in records:
                 yield key.decode("ascii", errors="replace"), pickle.loads(value)
     finally:
         env.close()
@@ -171,6 +181,7 @@ def compare(
     *,
     sidecar_path: Path | None = DEFAULT_SIDECAR,
     atol: float = 1e-4,
+    show_progress: bool = True,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     sidecar = load_sidecar(sidecar_path)
     reference_cache: dict[str, tuple[list[str], np.ndarray, Path] | Exception] = {}
@@ -179,7 +190,7 @@ def compare(
 
     for lmdb_path in lmdb_paths:
         split = lmdb_path.stem
-        for key, record in iter_lmdb(lmdb_path):
+        for key, record in iter_lmdb(lmdb_path, show_progress=show_progress):
             raw_id = record.get("pocket")
             pdb_id = sidecar.get((split, key), str(raw_id).strip().lower() if raw_id else "")
             base = {
@@ -263,6 +274,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--atol", type=float, default=1e-4)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--duplicates-output", type=Path, default=DEFAULT_DUPLICATES_OUTPUT)
+    parser.add_argument(
+        "--no-progress", action="store_true", help="Disable LMDB progress bars."
+    )
     return parser.parse_args()
 
 
@@ -274,6 +288,7 @@ def main() -> None:
         args.lmdb, args.combine_set,
         sidecar_path=None if args.no_sidecar else args.sidecar,
         atol=args.atol,
+        show_progress=not args.no_progress,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.duplicates_output.parent.mkdir(parents=True, exist_ok=True)

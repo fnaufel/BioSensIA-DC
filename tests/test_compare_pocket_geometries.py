@@ -34,7 +34,9 @@ def test_reports_heavy_atom_match_and_distinct_duplicate_geometries(tmp_path: Pa
          "pocket_coordinates": np.array([[0, 0, 0], [2, 0, 0]], dtype=float)},
     ])
 
-    rows, duplicates = compare([lmdb_path], combine_set, sidecar_path=None)
+    rows, duplicates = compare(
+        [lmdb_path], combine_set, sidecar_path=None, show_progress=False
+    )
 
     assert rows["status"].to_list() == ["heavy_atom_match", "mismatch"]
     assert duplicates.row(0, named=True)["occurrence_count"] == 2
@@ -51,7 +53,9 @@ def test_reports_full_match(tmp_path: Path) -> None:
         {"pocket": "2xyz", "pocket_atoms": ["C"], "pocket_coordinates": coords}
     ])
 
-    rows, duplicates = compare([lmdb_path], combine_set, sidecar_path=None)
+    rows, duplicates = compare(
+        [lmdb_path], combine_set, sidecar_path=None, show_progress=False
+    )
 
     assert rows.row(0, named=True)["status"] == "full_match"
     assert duplicates.is_empty()
