@@ -1,0 +1,591 @@
+---
+title: "Do the LMDB pockets agree with the PDBBind `combine_set` structures?"
+subtitle: "Consequences for assigning pockets to protein chains and UniProt entries"
+date: 2026-07-19
+lang: en
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+---
+
+## Executive answer
+
+**Not by PDB ID alone.** In these reports, none of the 66,427 LMDB records is
+an exact full-atom match to the corresponding `combine_set/<pdb_id>/data.pkl`,
+and only 220 records (0.33%) are exact matches after hydrogens are removed.
+The remaining 66,175 records are classified as mismatches, while 32 records
+refer to eight PDB IDs for which no local reference pocket was found.
+
+This does **not** imply that every mismatching LMDB pocket is unrelated to the
+deposited complex. The report uses a strict criterion: atom labels must have
+the same order and the coordinate arrays must agree element by element. A
+different subset of atoms from the same protein fails that criterion even when
+every LMDB coordinate occurs in the deposited protein structure.
+
+The practical conclusion is therefore:
+
+1. A `full_match` or `heavy_atom_match` is sufficient to use the corresponding
+   `combine_set` structure for chain assignment.
+2. A `mismatch` must undergo a second, per-LMDB-record spatial containment
+   test against `<pdb_id>_protein.pdb`.
+3. Only records whose atoms can be located in that protein file should inherit
+   its chain/entity/UniProt annotations.
+4. Records that do not map spatially must not be assigned from the raw PDB ID.
+   Their actual source structure or augmentation provenance is required.
+5. A pocket may span multiple chains. In that case the correct result is a set
+   of candidate proteins/entities, not an arbitrarily selected single protein.
+
+The sections below reproduce the report statistics and implement the required
+spatial validation.
+
+## Setup
+
+```{python}
+#| label: setup
+
+from __future__ import annotations
+
+import json
+import pickle
+from pathlib import Path
+
+import lmdb
+import numpy as np
+import polars as pl
+
+
+COMPARISON_PATH = Path("data/pocket_geometry_comparison.parquet")
+DUPLICATES_PATH = Path("data/pocket_geometry_duplicates.parquet")
+PAIR_SIDECAR_PATH = Path(
+    "data/biosensia_finetune/training_data_pairs.parquet"
+)
+ENTITY_METADATA_PATH = Path("data/pdb_entity_uniprot_metadata.parquet")
+FINETUNE_DIR = Path("data/biosensia_finetune")
+COMBINE_SET_DIR = Path("external/DrugCLIP/data/pdb/combine_set")
+
+comparison = pl.read_parquet(COMPARISON_PATH)
+duplicates = pl.read_parquet(DUPLICATES_PATH)
+pairs = pl.read_parquet(PAIR_SIDECAR_PATH)
+entities = pl.read_parquet(ENTITY_METADATA_PATH)
+
+comparison.shape, duplicates.shape
+```
+
+The comparison table has one row per LMDB record. The duplicate table has one
+row for each PDB ID that occurs more than once and summarizes the distinct LMDB
+geometry hashes associated with that ID.
+
+```{python}
+#| label: schemas
+
+comparison.glimpse()
+duplicates.glimpse()
+```
+
+## Report integrity
+
+Before interpreting the results, verify that the two expected splits are
+present and that `(split, lmdb_key)` is unique.
+
+```{python}
+#| label: integrity
+
+comparison.select(
+    pl.len().alias("rows"),
+    pl.struct("split", "lmdb_key").n_unique().alias("unique_record_keys"),
+    pl.col("pdb_id").n_unique().alias("unique_pdb_ids"),
+    pl.col("split").unique().sort().alias("splits"),
+)
+```
+
+## Exact geometry comparison
+
+### Overall result
+
+```{python}
+#| label: status-summary
+
+status_summary = (
+    comparison.group_by("status")
+    .agg(
+        pl.len().alias("records"),
+        pl.col("pdb_id").n_unique().alias("pdb_ids"),
+    )
+    .with_columns(
+        (100 * pl.col("records") / comparison.height)
+        .round(4)
+        .alias("percent_of_records")
+    )
+    .sort("records", descending=True)
+)
+
+status_summary
+```
+
+`full_match` requires identical ordered atom labels and coordinates. A
+`heavy_atom_match` applies the same test after hydrogen labels and their
+coordinates are removed. The tolerance used by the comparison script is
+reported in its command line; the default is 0.0001 Å with no rotation or
+translation.
+
+```{python}
+#| label: comparison-components
+
+comparison.select(
+    pl.col("full_atoms_equal").sum().alias("full_atom_arrays_equal"),
+    pl.col("full_coordinate_shape_equal")
+    .sum()
+    .alias("full_coordinate_shapes_equal"),
+    pl.col("full_geometry_equal").sum().alias("full_geometries_equal"),
+    pl.col("heavy_atoms_equal").sum().alias("heavy_atom_arrays_equal"),
+    pl.col("heavy_coordinate_shape_equal")
+    .sum()
+    .alias("heavy_coordinate_shapes_equal"),
+    pl.col("heavy_geometry_equal").sum().alias("heavy_geometries_equal"),
+)
+```
+
+For the heavy-atom matches, the coordinates are not merely close: they are
+identical at the precision stored in these files.
+
+```{python}
+#| label: heavy-match-errors
+
+comparison.filter(pl.col("heavy_geometry_equal")).select(
+    pl.len().alias("records"),
+    pl.col("heavy_max_abs_coordinate_error").max().alias("maximum_error_A"),
+    pl.col("heavy_rmsd").max().alias("maximum_rmsd_A"),
+)
+```
+
+### Missing local references
+
+```{python}
+#| label: errors
+
+comparison.filter(pl.col("status") == "error").select(
+    "pdb_id", "error"
+).unique().sort("pdb_id")
+```
+
+These rows cannot be validated against `combine_set` without restoring or
+reconstructing the missing reference files.
+
+## Repeated PDB IDs do not imply repeated geometries
+
+More than half of the repeated PDB IDs are associated with multiple distinct
+LMDB geometry hashes. Consequently, one `data.pkl` per PDB ID cannot represent
+all LMDB records carrying that ID.
+
+```{python}
+#| label: duplicate-summary
+
+duplicates.select(
+    pl.len().alias("repeated_pdb_ids"),
+    pl.col("has_different_lmdb_geometries")
+    .sum()
+    .alias("pdb_ids_with_multiple_lmdb_geometries"),
+    (
+        100
+        * pl.col("has_different_lmdb_geometries").sum()
+        / pl.len()
+    )
+    .round(2)
+    .alias("percent_with_multiple_geometries"),
+)
+```
+
+```{python}
+#| label: duplicate-histogram
+
+duplicates.group_by("unique_lmdb_geometry_count").agg(
+    pl.len().alias("pdb_ids"),
+    pl.col("occurrence_count").sum().alias("lmdb_records"),
+).sort("unique_lmdb_geometry_count")
+```
+
+This is the strongest reason not to transfer a chain assignment using only
+`record["pocket"]`: repeated records with the same PDB ID may describe
+different physical geometries.
+
+## Why the existing chain sidecar is not sufficient evidence
+
+The training-pair sidecar contains `pocket_chain_ids` for almost every row.
+
+```{python}
+#| label: sidecar-chain-availability
+
+chain_availability = pairs.select(
+    pl.len().alias("rows"),
+    pl.col("pocket_chain_ids").null_count().alias("null_chain_lists"),
+    (pl.col("pocket_chain_ids").list.len() == 0)
+    .sum()
+    .alias("empty_chain_lists"),
+    (pl.col("pocket_chain_ids").list.len() > 0)
+    .sum()
+    .alias("nonempty_chain_lists"),
+)
+
+chain_availability
+```
+
+```{python}
+#| label: sidecar-chain-counts
+
+pairs.with_columns(
+    pl.col("pocket_chain_ids").list.len().alias("chain_count")
+).group_by("chain_count").agg(
+    pl.len().alias("records"),
+    pl.col("pdb_id").n_unique().alias("pdb_ids"),
+).sort("chain_count")
+```
+
+However, these chain IDs were extracted from the local `combine_set` pocket
+file (or, as a fallback, its protein file). They were not established by
+matching every LMDB geometry to that file. This distinction matters because
+the chain list remains populated for nearly all rows classified as geometry
+mismatches.
+
+```{python}
+#| label: status-vs-sidecar-chains
+
+comparison.join(
+    pairs.select("split", "lmdb_key", "pocket_chain_ids"),
+    on=["split", "lmdb_key"],
+    how="left",
+).group_by("status").agg(
+    pl.len().alias("records"),
+    (pl.col("pocket_chain_ids").list.len() > 0)
+    .sum()
+    .alias("records_with_sidecar_chains"),
+).sort("records", descending=True)
+```
+
+Therefore, the presence of `pocket_chain_ids` is not independent validation
+that a particular LMDB record belongs to those chains.
+
+## The relevant second test: spatial containment in the protein PDB
+
+For protein assignment, an LMDB pocket does not have to equal the reference
+pocket. It is enough for its atoms to be found in the deposited protein
+structure. The function below matches every LMDB coordinate to the nearest
+`ATOM` coordinate in `<pdb_id>_protein.pdb`. It also checks the atom label and
+returns the author chain IDs of the matched atoms.
+
+PDB coordinates are printed to three decimal places. A 0.002 Å Euclidean
+tolerance safely covers that rounding while remaining far below ordinary
+interatomic distances. No structural alignment is performed: both coordinate
+sets must already occupy the same Cartesian frame.
+
+```{python}
+#| label: spatial-functions
+
+def find_protein_pdb(pdb_id: str) -> Path | None:
+    directory = COMBINE_SET_DIR / pdb_id.lower()
+    preferred = directory / f"{pdb_id.lower()}_protein.pdb"
+    if preferred.exists():
+        return preferred
+    alternatives = sorted(directory.glob("*_protein.pdb"))
+    return alternatives[0] if alternatives else None
+
+
+def read_protein_atoms(
+    path: Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    coordinates: list[tuple[float, float, float]] = []
+    atom_names: list[str] = []
+    chain_ids: list[str] = []
+
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if line[:6].strip() != "ATOM":
+                continue
+            try:
+                xyz = (
+                    float(line[30:38]),
+                    float(line[38:46]),
+                    float(line[46:54]),
+                )
+            except ValueError:
+                continue
+            coordinates.append(xyz)
+            atom_names.append(line[12:16].strip())
+            chain_ids.append(line[21].strip() or "?")
+
+    if not coordinates:
+        raise ValueError(f"No ATOM coordinates found in {path}")
+    return (
+        np.asarray(coordinates, dtype=np.float64),
+        np.asarray(atom_names),
+        np.asarray(chain_ids),
+    )
+
+
+def nearest_reference_atoms(
+    query: np.ndarray,
+    reference: np.ndarray,
+    *,
+    chunk_size: int = 128,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return nearest distances and indices without requiring SciPy."""
+    distances = np.empty(len(query), dtype=np.float64)
+    indices = np.empty(len(query), dtype=np.int64)
+    for start in range(0, len(query), chunk_size):
+        stop = min(start + chunk_size, len(query))
+        squared = np.sum(
+            (query[start:stop, None, :] - reference[None, :, :]) ** 2,
+            axis=2,
+        )
+        local_indices = np.argmin(squared, axis=1)
+        indices[start:stop] = local_indices
+        distances[start:stop] = np.sqrt(
+            squared[np.arange(stop - start), local_indices]
+        )
+    return distances, indices
+
+
+def audit_record_against_protein(
+    *,
+    pdb_id: str,
+    split: str,
+    lmdb_key: str,
+    record: dict,
+    tolerance: float = 0.002,
+) -> dict:
+    protein_path = find_protein_pdb(pdb_id)
+    if protein_path is None:
+        return {
+            "pdb_id": pdb_id,
+            "split": split,
+            "lmdb_key": lmdb_key,
+            "protein_match_status": "protein_pdb_missing",
+        }
+
+    reference_xyz, reference_atoms, reference_chains = read_protein_atoms(
+        protein_path
+    )
+    query_xyz = np.asarray(record["pocket_coordinates"], dtype=np.float64)
+    query_atoms = np.asarray([str(x).strip() for x in record["pocket_atoms"]])
+    distances, nearest = nearest_reference_atoms(query_xyz, reference_xyz)
+    matched = distances <= tolerance
+    matched_count = int(matched.sum())
+    labels_equal = query_atoms[matched] == reference_atoms[nearest[matched]]
+    chains = sorted(set(reference_chains[nearest[matched]].tolist()))
+
+    if matched_count == len(query_xyz) and bool(labels_equal.all()):
+        status = "all_atoms_and_labels_match"
+    elif matched_count == len(query_xyz):
+        status = "all_coordinates_match"
+    elif matched_count:
+        status = "partial_coordinate_match"
+    else:
+        status = "no_coordinate_match"
+
+    return {
+        "pdb_id": pdb_id,
+        "split": split,
+        "lmdb_key": lmdb_key,
+        "protein_match_status": status,
+        "lmdb_atom_count": len(query_xyz),
+        "matched_atom_count": matched_count,
+        "matched_atom_fraction": matched_count / len(query_xyz),
+        "matched_label_fraction": (
+            float(labels_equal.mean()) if matched_count else None
+        ),
+        "maximum_nearest_distance_A": float(distances.max()),
+        "matched_auth_asym_ids": chains,
+        "protein_path": str(protein_path),
+    }
+```
+
+### A reproducible diagnostic sample
+
+The following sample deliberately selects repeated PDB IDs with four distinct
+LMDB geometries, then audits every occurrence. This is designed to expose the
+failure mode that matters, rather than estimate a population percentage from a
+random sample.
+
+```{python}
+#| label: spatial-sample
+
+sample_pdb_ids = (
+    duplicates.filter(pl.col("unique_lmdb_geometry_count") == 4)
+    .sort("pdb_id")
+    .head(10)
+    .get_column("pdb_id")
+    .to_list()
+)
+
+sample_records: list[dict[str, str]] = []
+for encoded in (
+    duplicates.filter(pl.col("pdb_id").is_in(sample_pdb_ids))
+    .get_column("records_json")
+):
+    sample_records.extend(json.loads(encoded))
+
+sample_lookup = {
+    (row["split"], row["lmdb_key"]): row["pdb_id"]
+    for row in comparison.filter(pl.col("pdb_id").is_in(sample_pdb_ids))
+    .select("pdb_id", "split", "lmdb_key")
+    .iter_rows(named=True)
+}
+
+audit_rows: list[dict] = []
+for split in sorted({row["split"] for row in sample_records}):
+    lmdb_path = FINETUNE_DIR / f"{split}.lmdb"
+    environment = lmdb.open(
+        str(lmdb_path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+    )
+    try:
+        with environment.begin() as transaction:
+            for source in sample_records:
+                if source["split"] != split:
+                    continue
+                key = source["lmdb_key"]
+                value = transaction.get(key.encode("ascii"))
+                if value is None:
+                    raise KeyError(f"Missing LMDB key {split}:{key}")
+                record = pickle.loads(value)
+                pdb_id = sample_lookup[(split, key)]
+                audit_rows.append(
+                    audit_record_against_protein(
+                        pdb_id=pdb_id,
+                        split=split,
+                        lmdb_key=key,
+                        record=record,
+                    )
+                )
+    finally:
+        environment.close()
+
+spatial_audit = pl.DataFrame(audit_rows, infer_schema_length=None)
+spatial_audit.sort("pdb_id", "split", "lmdb_key")
+```
+
+```{python}
+#| label: spatial-sample-summary
+
+spatial_audit.group_by("protein_match_status").agg(
+    pl.len().alias("records"),
+    pl.col("pdb_id").n_unique().alias("pdb_ids"),
+    pl.col("matched_atom_fraction").mean().alias("mean_matched_fraction"),
+).sort("records", descending=True)
+```
+
+With the current files, this purposive sample contains 40 records: 9 have
+complete coordinate and atom-label matches, 30 have no coordinate match, and 1
+has a partial match (82.90% of its atoms). This is not a population estimate—the
+sample intentionally targets PDB IDs with four distinct geometries—but it
+directly demonstrates that records sharing one PDB ID can have different
+relationships to the deposited protein structure.
+
+If different records carrying the same PDB ID produce both complete and zero
+or partial matches, the PDB ID is demonstrably insufficient provenance for
+protein assignment. The complete matches can be assigned; the others cannot.
+
+## Mapping validated chains to protein entities
+
+For completely matched records, explode the matched author chain IDs and join
+them to the normalized RCSB/UniProt entity sidecar.
+
+```{python}
+#| label: validated-protein-mappings
+
+entity_chains = (
+    entities.explode("auth_asym_ids")
+    .rename({"auth_asym_ids": "auth_asym_id"})
+    .with_columns(pl.col("pdb_id").str.to_lowercase())
+)
+
+validated_protein_mappings = (
+    spatial_audit.filter(
+        pl.col("protein_match_status").is_in(
+            ["all_atoms_and_labels_match", "all_coordinates_match"]
+        )
+    )
+    .explode("matched_auth_asym_ids")
+    .rename({"matched_auth_asym_ids": "auth_asym_id"})
+    .join(
+        entity_chains.select(
+            "pdb_id",
+            "auth_asym_id",
+            "rcsb_polymer_entity_id",
+            "entity_description",
+            "uniprot_accession",
+            "uniprot_isoform",
+            "entry_mapping_status",
+        ),
+        on=["pdb_id", "auth_asym_id"],
+        how="left",
+    )
+    .sort("pdb_id", "split", "lmdb_key", "auth_asym_id")
+)
+
+validated_protein_mappings
+```
+
+A record with multiple `auth_asym_id` values can represent an interface pocket.
+Different chains may be copies of the same protein or distinct proteins; the
+entity and UniProt columns make that distinction explicit.
+
+## Recommended production rule
+
+The safe rule for enriching rankings is:
+
+```text
+LMDB record
+  ├─ full/heavy exact reference match
+  │    └─ use chain(s) from the corresponding combine_set pocket/protein
+  └─ strict mismatch
+       ├─ all LMDB atoms spatially match <pdb_id>_protein.pdb
+       │    └─ use the chain(s) returned by the coordinate matches
+       ├─ only some atoms match
+       │    └─ flag for review; do not select one protein automatically
+       └─ no atoms match
+            └─ do not use combine_set for protein assignment
+```
+
+For production use, write the spatial-audit result to a new sidecar keyed by
+`(split, lmdb_key)` (or by the candidate-library digest and candidate key).
+Suggested columns are:
+
+- `protein_match_status`;
+- `matched_atom_fraction`;
+- `matched_label_fraction`;
+- `maximum_nearest_distance_A`;
+- `matched_auth_asym_ids`;
+- `rcsb_polymer_entity_ids`;
+- `uniprot_accessions`;
+- the protein file path and a digest of that file;
+- the coordinate tolerance and algorithm version.
+
+The existing entry-level UniProt metadata remains useful, but it should be
+filtered through this geometry-to-chain relation before claiming that a
+specific protein contains a specific LMDB pocket.
+
+## Final conclusion
+
+The current data support a **conditional yes**, not an unconditional one:
+
+- The `combine_set` structures are suitable for identifying pocket proteins
+  **when the individual LMDB geometry can be matched to their atoms**.
+- The raw PDB complex ID is not sufficient, because repeated IDs frequently
+  carry distinct geometries and strict reference agreement is very rare.
+- Exact heavy-atom matches are already safe.
+- Many strict mismatches may still be safe after a spatial containment test,
+  because a different pocket subset can belong to the same deposited protein.
+- A mismatch that fails containment must remain unmapped until its true source
+  structure or augmentation provenance is recovered.
+
+Thus, `combine_set` can be part of the solution, but protein assignment must be
+made per physical LMDB candidate, not per PDB ID.

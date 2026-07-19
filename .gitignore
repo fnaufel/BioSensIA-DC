@@ -45,3 +45,6 @@ runs/
 # Quarto
 **/*_files/
 **/*_ipynb*
+
+/.quarto/
+**/*.quarto_ipynb
